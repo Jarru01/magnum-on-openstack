@@ -1,0 +1,15 @@
+# temporary / local scratch (colleague's deploy log, not part of the runbook)
+tmp/
+
+# secrets / credentials
+*.pem
+*.key
+*.crt
+.env
+kubeconfig/
+
+# large binaries
+*.qcow2
+*.qcow2.xz
+*.docx
+*.log
