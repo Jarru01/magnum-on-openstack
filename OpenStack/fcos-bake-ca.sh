@@ -7,7 +7,7 @@
 #
 # Usage:
 #   IMAGE=fedora-coreos-38.20230806.3.0-openstack.x86_64.qcow2 \
-#   CA=~/kis-ca/kisroot-ca.crt \
+#   CA=~/magnum-work/kisroot-ca.crt \
 #   OUT=fcos-ca.qcow2 \
 #   sudo -E bash fcos-bake-ca.sh
 set -euo pipefail

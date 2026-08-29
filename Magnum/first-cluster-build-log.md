@@ -167,4 +167,4 @@ idempotency.
 | `magnum-k8s.pem` | Private SSH key for cluster nodes — **no other way in** |
 | `kubeconfig/config` | kubectl credentials |
 | `kubectl` (v1.26.8) | Matching kubectl binary |
-| `kisroot-ca.crt` | Vault root CA |
+| `kisroot-ca.crt` | Vault root CA — working copy at `~/magnum-work/kisroot-ca.crt`; retained anchor `~/snap/openstackclients/common/` (from the initial cloud deploy, Apr) |

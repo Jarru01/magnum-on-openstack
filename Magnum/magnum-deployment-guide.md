@@ -66,9 +66,20 @@ CA into the unit's trust store. Token validation against the HTTPS keystone
 endpoint then fails (SSL `CERTIFICATE_VERIFY_FAILED` → API returns 503
 "Keystone service is temporarily unavailable"). The **canonical** fix:
 
+> **Where the CA file comes from:** `kisroot-ca.crt` is the cloud's Vault root CA
+> (`CN = Vault Root Certificate Authority (charm-pki-local)`, self-signed). It is
+> NOT created by this guide — it predates it: the retained anchor lives with the
+> openstack clients snap (`~/snap/openstackclients/common/kisroot-ca.crt`, from the
+> initial cloud deploy) and the working copy at `~/magnum-work/kisroot-ca.crt` was
+> copied from it. All copies are byte-identical (verified by SHA). If it is ever
+> lost, re-export the root from the deployed vault charm (`charm-pki-local` PKI)
+> rather than regenerating — regenerating would invalidate every service cert.
+
 ```bash
 # 1. copy the Vault root CA into a plain-path temp dir (juju cannot read ~/snap/... paths):
-cp ~/kis-ca/kisroot-ca.crt ~/magnum-work/kisroot-ca.crt
+#    the working copy already exists on the cloud host at ~/magnum-work/kisroot-ca.crt;
+#    if absent, take it from the retained snap anchor:
+cp ~/snap/openstackclients/common/kisroot-ca.crt ~/magnum-work/kisroot-ca.crt
 juju scp -m kis ~/magnum-work/kisroot-ca.crt magnum/0:/tmp/kisroot-ca.crt
 
 # 2. install into the unit's trust store:
@@ -82,7 +93,9 @@ juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-con
 
 > NOTE: juju (snap) cannot read files under `~/snap/...` or `/tmp` of other
 > snaps/users — stage copies in plain `$HOME`. After `update-ca-certificates`,
-> `curl https://192.0.2.1:5000/v3` from the unit returns 200.
+> `curl https://192.0.2.1:5000/v3` from the unit returns 200 (verified). The source
+> `.crt` in `/usr/local/share/ca-certificates/` may be removed later — the hashed
+> entry in `/etc/ssl/certs` persists and keystone still validates without `-k`.
 
 ---
 
