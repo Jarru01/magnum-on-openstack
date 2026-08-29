@@ -31,7 +31,7 @@ openstack coe cluster template create k8s-ct-golden \
 |---|---|---|
 | `kube_tag` | `v1.26.8-rancher1` | Controls the k8s version |
 | `container_runtime` | `containerd` | Bypasses the `host-docker` default (pre-1.24 only) |
-| `containerd_version` | `1.6.20` | Required for k8s 1.26 (CRI v1 support; the default 1.4.4 is too old) |
+| `containerd_version` | `1.6.20` | Required for k8s 1.26 (CRI v1 support; the charm-era default is too old — always set it via template label) |
 | `containerd_tarball_sha256` | `1d86b534…d824b416` | Integrity check for the containerd tarball |
 
 The flannel CNI fix lives in the `flannel-service.sh` template fragment on the
@@ -59,15 +59,19 @@ status_reason: deploy_status_code : Deployment exited with non-zero status code:
 | 1. Create project | `openstack project create <project>` | One-time |
 | 2. Create user | `openstack user create --project <project> --domain admin_domain <user>` | One-time |
 | 3. Add roles | `openstack role add --project <project> --user <user> member` **and** `openstack role add --project <project> --user <user> load-balancer_member` | Both **required**: `member` for the cluster itself, `load-balancer_member` so cluster **delete** works (Octavia pre-delete 403 otherwise — see §4). Add `admin` too if they must download kubeconfig for clusters **they didn't create** (§3) |
-| 4. Create keypair | `openstack keypair create --user <user> --domain <domain> <keypair-name>` | Per-user; keypairs are user-scoped |
+| 4. *Skip for the common case* | see note below | Golden clusters embed the operator's `magnum-k8s` keypair — users get **no SSH**. A personal keypair only matters if the operator provisions a per-user template copy |
 | 5. Source credentials | `source <project>-openrc.sh` | Must match the project |
 | 6. Create cluster | `openstack coe cluster create <name> --cluster-template k8s-ct-golden --master-count 1 --node-count 1` | Template must be `--public` or in the same project |
 | 7. Get kubeconfig | `openstack coe cluster config <name> --dir ~/kubeconfig` | Or via Skyline: cluster detail → **Download kubeconfig** |
 | 8. Use cluster | `export KUBECONFIG=~/kubeconfig/config; kubectl get nodes` | Minimum: install `kubectl`, have the master FIP routable |
 
-**Key gotcha:** keypairs are **per-USER** in this Nova version, not per-project.
-Each user must create their own keypair and their cluster template must point at it
-(`--keypair <their-keypair>`).
+**Key gotcha: keypairs are per-USER in this Nova version, not per-project.** The
+public golden template carries the operator's `magnum-k8s` keypair, so clusters
+created from it are **not SSH-able by the creating user** — kubeconfig/kubectl is
+the access path. If a user needs node SSH, the operator must create a per-user
+template copy (private or project-scoped) with `--keypair <their-keypair>`; a
+plain `member` cannot fork a public template themselves. `magnum-k8s.pem` stays
+operator-only in all cases.
 
 ### Cluster visibility vs. keypair scoping
 

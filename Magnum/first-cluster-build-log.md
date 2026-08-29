@@ -55,6 +55,11 @@ Final state (original build): **CREATE_COMPLETE / HEALTHY**, both nodes `Ready`
 (v1.26.8, containerd 1.6.19), all kube-system pods Running, test deployment
 (`nginx:alpine`) Running.
 
+> Note: the original build used the interim `k8s-ct` template and ran containerd
+> 1.6.19 (charm default). The current `k8s-test` was recreated from the **golden**
+> template on 2026-08-28 and runs **containerd 1.6.20** with the same kube/flannel
+> stack — version numbers above are historical.
+
 Getting there required fixing five separate defects — each verified before moving on:
 
 ### 1.1 `heat_stack_user` role missing (pre-existing cloud gap)
@@ -102,8 +107,9 @@ in the golden template.
 Nodes registered but stayed NotReady; three stacked issues:
 
 1. `quay.io/coreos/flannel-cni:v0.3.0` → **401** (tag effectively gone from quay).
-   The `install-cni-plugins` initContainer was replaced with a busybox fetch of the
-   official plugins — see [`flannel-patch.json`](../Kubernetes/flannel-patch.json).
+   The `install-cni-plugins` initContainer was replaced with a single init container
+   that copies `/flannel` from the rancher mirror image and downloads the standard
+   CNI plugins — the exact patch ships as [`fix-flannel-final.py`](fix-flannel-final.py).
 2. containerd looked for plugins in `/usr/libexec/cni/` (its config.toml) while
    magnum installs to `/opt/cni/bin`; a bind mount alone is not enough — containerd
    caches the dir at startup (must restart containerd **and** kubelet).

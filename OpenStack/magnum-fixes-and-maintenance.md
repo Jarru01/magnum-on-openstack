@@ -37,13 +37,13 @@ revert either — only haproxy.cfg is re-rendered back by charm hooks.
 
 | # | Issue | Status | How eliminated |
 |---|---|---|---|
-| 5 | Kubelet legacy `--network-plugin`, `--cni-*` flags | **ELIMINATED** | `container_runtime=containerd` in golden template |
-| 6 | Kubelet missing `--container-runtime-endpoint` | **ELIMINATED** | `container_runtime=containerd` in golden template |
-| 7 | Standalone containerd not running | **ELIMINATED** | `container_runtime=containerd` in golden template |
-| 8 | kubelet restart after all patches | **ELIMINATED** | no patches needed |
-| 9 | containerd `bin_dir` wrong | **ELIMINATED** | `container_runtime=containerd` in golden template |
-| 10 | Flannel CNI plugins dead quay tag | **ELIMINATED** | `install-cni-plugins` uses rancher image + wget |
-| 11 | Missing `flannel` binary in `/opt/cni/bin/` | **ELIMINATED** | `install-cni-plugins` copies `/flannel` from rancher image |
+| 6 | Kubelet legacy `--network-plugin`, `--cni-*` flags | **ELIMINATED** | `container_runtime=containerd` in golden template |
+| 7 | Kubelet missing `--container-runtime-endpoint` | **ELIMINATED** | `container_runtime=containerd` in golden template |
+| 8 | Standalone containerd not running | **ELIMINATED** | `container_runtime=containerd` in golden template |
+| 9 | kubelet restart after all patches | **ELIMINATED** | no patches needed |
+| 10 | containerd `bin_dir` wrong | **ELIMINATED** | `container_runtime=containerd` in golden template |
+| 11 | Flannel CNI plugins dead quay tag | **ELIMINATED** | `install-cni-plugins` uses rancher image + wget |
+| 12 | Missing `flannel` binary in `/opt/cni/bin/` | **ELIMINATED** | `install-cni-plugins` copies `/flannel` from rancher image |
 
 The `flannel-service.sh` patch lives on the magnum unit (template fragment
 `.../magnum/drivers/common/templates/kubernetes/fragments/flannel-service.sh`).
@@ -165,10 +165,10 @@ create a test cluster before making it the default.
    versions when available, bypassing edits to the uncompressed `.js`.
 8. **Skyline frontend silently swallows errors** — the generic "Unable to get Data"
    wraps any JS exception; check DevTools for the real TypeError.
-9. **`containerd_version` default (1.4.4) is too old for k8s ≥1.26** — k8s 1.26
-   requires CRI v1 (containerd ≥1.6.x); must be specified in template labels.
+9. **The charm-era `containerd_version` default is too old for k8s ≥1.26** — k8s 1.26
+   requires CRI v1 (containerd ≥1.6.x); always set it via template label.
 10. **Upstream template defaults are intentional** — `container_runtime=host-docker`
-    and `containerd_version=1.4.4` target pre-1.24. For k8s ≥1.24 you MUST override
+    and the pre-1.6 containerd default target pre-1.24. For k8s ≥1.24 you MUST override
     via template labels.
 11. **Flannel image `quay.io/coreos/flannel-cni:v0.3.0` is gone** — patch
     `flannel-service.sh` to the rancher mirror (survives everything except

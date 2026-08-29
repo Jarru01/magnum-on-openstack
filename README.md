@@ -24,7 +24,7 @@ Document | Description
 [Disaster recovery](OpenStack/disaster-recovery.md) | Power outage / full reboot procedure
 [Architecture overview](OpenStack/architecture-overview.md) | How Magnum → Heat creates clusters, component maps
 [Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, no PVCs, LBaaS caveats
-[Flannel patch](Magnum/fix-flannel-final.py) · [patch json](Kubernetes/flannel-patch.json) | The patched `flannel-service.sh` + init-container patch eliminating node-level CNI fixes
+[Flannel patch](Magnum/fix-flannel-final.py) | The patched `flannel-service.sh` — init container copies `/flannel` from the rancher mirror and fetches the standard CNI plugins, eliminating node-level CNI fixes
 [FCOS CA bake script](OpenStack/fcos-bake-ca.sh) | Re-baking the Vault root CA into a Fedora CoreOS image (`qemu-nbd`, no `virt-customize`)
 [Kubeconfig examples](Kubernetes/kubeconfig-dashboard-token.example.yaml) / [DNAT](Kubernetes/kubeconfig-dnat.example.yaml) | Ready templates for dashboard and DNAT kubeconfig files
 

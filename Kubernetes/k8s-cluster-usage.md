@@ -75,7 +75,8 @@ allow certificate:get"). Workflow + options: see the permission model in
   stays admin/operator-only.
 * For per-user RBAC later: `openstack coe cluster config --use-keystone` produces a
   token-authenticated kubeconfig backed by the in-cluster `k8s-keystone-auth`
-  webhook. Default remains the admin cert.
+  webhook *(untested on this cloud — the webhook DaemonSet runs, but the flag's
+  token flow has not been verified end-to-end)*. Default remains the admin cert.
 
 ---
 
