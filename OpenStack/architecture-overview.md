@@ -98,3 +98,37 @@ This is also where the `cluster_user_trust` bug lived: `template_def.py` only pa
   Juju asks MAAS for brand-new machines and hangs.
 * Capacity plan: minimal clusters are 1 master + 1 worker on flavor `2c2r20d`
   (smaller masters fail — see `golden-cluster-template.md` §1).
+
+---
+
+## Intended multi-tenant model & upstream direction
+
+Magnum's stated job is **Containers-as-a-Service** — Kubernetes as a first-class
+OpenStack resource. Multi-tenancy is drawn **around each cluster, not inside it**:
+every user provisions their **own** cluster in their **own** project, isolated by
+Keystone roles + per-cluster private Neutron networks ("the COE is not multi-tenant;
+isolation happens at the networking layer"). That is the intended "big multi-user"
+use — many users × many private clusters — **not** hundreds of users sharing one
+cluster with in-cluster RBAC. That's why the kubeconfig model assumes one
+owner/creator per cluster (see the membership discussion in
+`../Kubernetes/k8s-cluster-usage.md`).
+
+**Scale is proven** at the cluster level: CERN ran Magnum in production and tested
+bays up to ~1,000 nodes (2M req/s on a 200-node bay). Documented scale costs:
+- Many clusters → Magnum's periodic stack-get per cluster loads Heat (a global
+  stack-list optimization exists but is security-sensitive, so off by default).
+- Multi-AZ HA is still listed "work in progress" in the heat-driver docs.
+
+**The Heat driver — this deployment's `k8s_fedora_coreos_v1` — is being removed
+upstream.** Magnum 2025.1 deprecates the heat driver in favor of the Cluster API
+drivers (`k8s_capi_helm`, `k8s_cluster_api`); newer releases drop
+`k8s_fedora_coreos_v1` entirely (along with the Keystone trust manager it was the
+only consumer of). The CAPI drivers are production-ready per StackHPC/Azimuth and
+modernize the credential/CA story, but require a CAPI **management cluster** plus
+Barbican and Octavia, and still serve per-cluster kubeconfigs (the certificate
+model survives because the tenant boundary remains *between* clusters).
+
+**Conclusion:** Magnum is the right tool for "many users, each with their own
+cluster" (most future-proofly on a CAPI driver). It is the wrong tool for "one big
+shared cluster with per-user RBAC inside" — that is managed-k8s territory
+(Rancher/RKE, OpenShift); fittingly this cloud's k8s is already `v1.26.8-rancher1`.
