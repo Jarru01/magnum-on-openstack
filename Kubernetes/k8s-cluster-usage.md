@@ -144,6 +144,13 @@ The private key (`magnum-k8s.pem`) is the only way in — do not lose it.
 
 ## 5. Reaching the cluster when the FIP is NOT routable (maas DNAT)
 
+> **This section is specific to the reference cloud's topology.** Here the cluster
+> FIPs are hidden behind the maas host, so the maas nft DNAT rule (plus the
+> kubeconfig `server:`/flag edits below) is required to reach the API from a user
+> PC. On production OpenStack with routable FIPs this entire section does **not**
+> apply — users point kubectl at the master FIP directly and the downloaded
+> kubeconfig works unmodified.
+
 If the cluster master FIP can't be reached directly from the user's PC/VPN, expose
 the API through the maas host's public IP with an nft DNAT rule. **maas uses nft,
 not iptables.**

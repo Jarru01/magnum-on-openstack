@@ -109,6 +109,16 @@ the magnum download) and replace **only the user entry** with the token — keep
 
 ## Step 2 — Choose how to reach it
 
+> **Lab vs production exposure.** The cluster FIPs of this reference cloud are
+> **not routable** from outside, so every exposure path ends at the maas host
+> (public IP → nft DNAT rule → node FIP). That makes the nft DNAT rules in 2c
+> mandatory *here* — and they are operator work (a manual rule per cluster,
+> re-added after a maas reboot). On **production** OpenStack with routable FIPs
+> there is **no NAT step**: a NodePort is reachable directly from the node's own
+> FIP (open only the port in the node security group), and 2a provides a managed
+> floating IP with no maas involvement. 2c documents this cloud's topology, not a
+> production pattern.
+
 ### Option 2a — `type: LoadBalancer` via Octavia (self-service, no maas)
 
 Patch the service and `openstack-cloud-controller-manager` provisions an Octavia
@@ -141,9 +151,12 @@ kubectl -n kube-system port-forward svc/kubernetes-dashboard 8443:443
 
 Needs the API address to be reachable from wherever you run it.
 
-### Option 2c — NodePort + maas nft DNAT (legacy; operator-only)
+### Option 2c — NodePort + maas nft DNAT (lab topology only; operator-only)
 
-Requires SSH access to the maas host, so it only suits the cloud operator.
+Requires SSH access to the maas host, so it only suits the cloud operator — this
+path exists only because the reference cloud's FIPs are not routable from outside
+(see the callout at the top of Step 2). On production with routable FIPs the
+NodePort is reachable directly from the node FIP.
 
 *Step 2c.1 — change the dashboard service to NodePort:*
 

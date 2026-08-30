@@ -72,6 +72,14 @@ They sit on the nodes' ephemeral filesystem, but the flannel DaemonSet init
 container re-downloads them automatically on pod restart. No manual intervention
 needed.
 
+### maas nft DNAT rules for clusters (lab topology only)
+
+The exposure rules added per [`k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md)
+§5 / [`kubernetes-dashboard.md`](../Kubernetes/kubernetes-dashboard.md) Option 2c
+are **not persistent** — re-add them after a maas reboot. These rules exist only
+because the reference cloud's FIPs are not routable from outside; on production
+OpenStack with routable FIPs there are no such rules to re-add.
+
 ---
 
 ## Recovery procedure after full reboot

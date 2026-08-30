@@ -11,6 +11,10 @@ Guides, configuration files and notes on deploying the OpenStack **Magnum**
 > **Note on addresses:** values in these guides use reserved documentation ranges
 > (RFC 5737) and `<placeholders>` — not the live cloud's addresses or passwords.
 
+> **Topology note:** this is a **reference/lab cloud** — its cluster FIPs are not
+> routable from outside, so some guides include MAAS `nft` DNAT workarounds.
+> On production OpenStack with routable FIPs those steps do not apply.
+
 ## 📚 Documents in this repository
 
 Document | Description
@@ -18,7 +22,7 @@ Document | Description
 [Magnum deployment guide](Magnum/magnum-deployment-guide.md) | Deploying the magnum service + trustee domain setup, charm quirks, project-layout gotchas
 [Golden cluster template](Magnum/golden-cluster-template.md) | The canonical template, onboarding a new project/user, the kubeconfig permission model and create/delete failure modes
 [First cluster build log](Magnum/first-cluster-build-log.md) | How the first working cluster was built (the five defects behind the golden template)
-[Cluster usage (kubectl)](Kubernetes/k8s-cluster-usage.md) | Getting the kubeconfig (CLI & Skyline), installing kubectl, DNAT routing, production access model
+[Cluster usage (kubectl)](Kubernetes/k8s-cluster-usage.md) | Getting the kubeconfig (CLI & Skyline), installing kubectl, reachability workarounds (lab topology), production access model
 [Kubernetes dashboard](Kubernetes/kubernetes-dashboard.md) | Logging in (token / skip) and exposing the dashboard (Octavia LB / proxy / NodePort+DNAT)
 [Magnum fixes & maintenance](OpenStack/magnum-fixes-and-maintenance.md) | Recurring charm quirks, the flannel fix, Skyline Container Infra fixes, FCOS upgrades, lessons learned
 [Disaster recovery](OpenStack/disaster-recovery.md) | Power outage / full reboot procedure
