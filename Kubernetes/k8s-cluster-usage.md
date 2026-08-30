@@ -78,6 +78,34 @@ allow certificate:get"). Workflow + options: see the permission model in
   webhook *(untested on this cloud — the webhook DaemonSet runs, but the flag's
   token flow has not been verified end-to-end)*. Default remains the admin cert.
 
+### Future work: role-scoped kubeconfigs for shared clusters
+
+Current posture assumes **one operator owns each cluster** — everyone allowed
+through `certificate:get` (creator/admin) receives the *same* full-admin client
+cert. There is no per-user split today. If multiple *trusted* users must share a
+cluster with role-based limits later, the relevant facts and options:
+
+* **`--use-keystone` already exists** and produces a `token:` kubeconfig — but it
+  is gated by the **same** `certificate:get` policy as the cert path, because the
+  CLI still fetches the cluster CA from `GET /v1/certificates/<cluster>` first.
+  So today it works only for creator/admin, not for plain members.
+* **The real blocker for members isn't assembly, it's the CA gate.** That single
+  endpoint returns the cluster CA *and* the per-cluster admin client cert
+  together; there is no "CA only" response and no server-side "token kubeconfig"
+  mode. Letting a member fetch the CA unavoidably hands them the admin cert too.
+* **Viable route A (dashboard-backed):** a role-differentiated download — the
+  Skyline kubeconfig endpoint (currently charm-injected source) checks the
+  user's project role / cluster ownership: `admin`/owner → today's admin-cert
+  kubeconfig; member → embed the member's live keystone token with the CA
+  fetched via a **service account** (never the admin cert). Requires in-cluster
+  RBAC bindings for member webhook groups, and member-token downloads expire with
+  the keystone token (~1h).
+* **Viable route B (standalone issuer):** a small service of our own that relays
+  the CA via a service account and assembles member token kubeconfigs — **no
+  OpenStack/charm code touched**, keeps the interim charm patches from growing
+  further, but is a separate component to host and maintain.
+* Both are deferred: **not built, not needed** for the current single-owner use.
+
 ---
 
 ## 2. Installing kubectl
