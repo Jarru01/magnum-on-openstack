@@ -52,7 +52,11 @@ with an empty reply. Symptom signature: every other API service works, only magn
 fails. Re-apply the canonical fix block:
 
 ```bash
-juju ssh magnum/0 -- sudo sed -i 's/192.0.2.11:9501/127.0.0.1:9501/' /etc/haproxy/haproxy.cfg
+# NB: the charm re-renders the backend to the magnum unit's CURRENT IP, which can
+# CHANGE between reboots (seen both as 192.0.2.11 and 10.11.1.213). Match ANY
+# <ip>:9501 backend and force it to loopback — hardcoding one IP makes the sed a
+# silent no-op when the value differs.
+juju ssh magnum/0 -- sudo sed -i 's/[0-9.:]*:9501/127.0.0.1:9501/' /etc/haproxy/haproxy.cfg
 juju ssh magnum/0 -- sudo systemctl restart haproxy
 juju ssh magnum/0 -- sudo sed -i 's/v2.0/v3/g' /etc/magnum/magnum.conf
 juju ssh magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
@@ -60,11 +64,13 @@ juju ssh magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
 
 > **Why the `127.0.0.1:9501` variant is durable:** the charm re-render drops the
-> `host` line from `magnum.conf`, so magnum-api always returns to a loopback bind.
-> Pointing haproxy at the loopback therefore survives those re-renders; only a
-> haproxy.cfg re-render needs the re-sed. (Setting `[api] host = 192.0.2.11` also
-> fixes it temporarily, but is wiped by the next charm hook — prefer the
-> haproxy-side fix.)
+> `host` line from `magnum.conf`, so magnum-api always returns to a loopback bind
+> (`ss -tlnp` shows `127.0.0.1:9501`). Pointing haproxy at the loopback therefore
+> survives those re-renders; only a haproxy.cfg re-render needs the re-sed. If the
+> backend shows a concrete IP (e.g. `10.11.1.213:9501`) while magnum-api listens on
+> `127.0.0.1:9501`, haproxy cannot reach it → **502 Bad Gateway**. (Setting
+> `[api] host = <ip>` also fixes it temporarily, but is wiped by the next charm hook
+> — prefer the haproxy-side fix.)
 
 ### CNI plugins / flannel binary
 
@@ -90,7 +96,8 @@ openstack server start k8s-test-<id>-master-0
 openstack server start k8s-test-<id>-node-0
 
 # 2. re-apply the magnum haproxy + keystone v3 fix (charm re-rendered them away)
-juju ssh magnum/0 -- sudo sed -i 's/192.0.2.11:9501/127.0.0.1:9501/' /etc/haproxy/haproxy.cfg
+#    (backend IP can change between reboots — match any <ip>:9501, force loopback)
+juju ssh magnum/0 -- sudo sed -i 's/[0-9.:]*:9501/127.0.0.1:9501/' /etc/haproxy/haproxy.cfg
 juju ssh magnum/0 -- sudo systemctl restart haproxy
 juju ssh magnum/0 -- sudo sed -i 's/v2.0/v3/g' /etc/magnum/magnum.conf
 juju ssh magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
