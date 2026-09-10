@@ -47,7 +47,7 @@ the certificates relation enables — see [`disaster-recovery.md`](disaster-reco
 
 ---
 
-## 2. Node-level fixes (ALL eliminated by the golden template + flannel patch)
+## 2. Node-level fixes (golden template + flannel patch)
 
 | # | Issue | Status | How eliminated |
 |---|---|---|---|
@@ -56,40 +56,88 @@ the certificates relation enables — see [`disaster-recovery.md`](disaster-reco
 | 8 | Standalone containerd not running | **ELIMINATED** | `container_runtime=containerd` in golden template |
 | 9 | kubelet restart after all patches | **ELIMINATED** | no patches needed |
 | 10 | containerd `bin_dir` wrong | **ELIMINATED** | `container_runtime=containerd` in golden template |
-| 11 | Flannel CNI plugins dead quay tag | **ELIMINATED** | `install-cni-plugins` uses rancher image + wget |
-| 12 | Missing `flannel` binary in `/opt/cni/bin/` | **ELIMINATED** | `install-cni-plugins` copies `/flannel` from rancher image |
+| 11 | Flannel CNI plugins dead upstream image | **PATCHED (manual)** | `install-cni-plugins` uses the rancher mirror + `wget` of the standard plugins |
+| 12 | Missing `flannel` binary in `/opt/cni/bin/` | **PATCHED (manual)** | `install-cni-plugins` copies `/flannel` from the rancher mirror image |
 
-The `flannel-service.sh` patch lives on the magnum unit (template fragment
-`.../magnum/drivers/common/templates/kubernetes/fragments/flannel-service.sh`).
-Re-apply after `juju refresh`/`juju upgrade-charm` with:
+Issues 6–10 are fixed purely by the golden template's labels — the same labels the
+driver exposes (`container_runtime`, `containerd_version`, `containerd_tarball_sha256`
+in `drivers/heat/k8s_fedora_template_def.py`), so nothing is patched by hand.
+
+### The flannel patch (issues 11–12) — why it is manual
+
+The upstream fragment (`.../fragments/flannel-service.sh`) renders:
+
+```yaml
+image: ${_prefix}flannel-cni:${FLANNEL_CNI_TAG}      # _prefix = CONTAINER_INFRA_PREFIX or quay.io/coreos/
+args:  ["/etc/kube-flannel/magnum-install-cni.sh"]   # copies /opt/cni/bin/*
+```
+
+with `flannel_cni_tag` default `v0.3.0`. The label **exists** as an override
+(`flannel_cni_tag` / `container_infra_prefix`), but it is a dead end today — the
+image is gone everywhere (checked 2026-09-10):
+
+| Reference | Result |
+|---|---|
+| `quay.io/coreos/flannel-cni:v0.3.0` | 401 (repo gone) |
+| `quay.io/coreos/flannel:v0.15.1` | 200 (daemon image still fine) |
+| Docker Hub `coreos/flannel-cni` | 404 |
+| `openstackmagnum/flannel-cni` | 404 |
+| `quay.io/flannel/flannel-cni`, `docker.io/flannel/flannel-cni` | 401 / 404 |
+| `docker.io/flannel/flannel-cni-plugin` | 200, but different name/layout (`/flannel`) |
+
+So the fragment is patched in place. The patch has gone through three states:
+
+1. **PRISTINE** — `image: ${_prefix}flannel-cni:${FLANNEL_CNI_TAG}` + `magnum-install-cni.sh`
+2. **BUSYBOX** — `busybox:1.36` + inline `wget` of the standard plugins (no flannel
+   binary → nodes `NotReady`)
+3. **FINAL** — rancher mirror image + `cp /flannel /host/opt/cni/bin/flannel` +
+   `wget` of the standard plugins
+
+[`../Magnum/fix-flannel-final.py`](../Magnum/fix-flannel-final.py) recognises **all**
+of these states and is idempotent: it patches PRISTINE / BUSYBOX / RANCHER_OLDARG →
+FINAL, is a no-op when already FINAL, refuses to write on an unrecognised state
+(exit 2), backs the file up first and restores it if post-write validation fails.
 
 ```bash
-juju ssh magnum/0 -- python3 fix-flannel-final.py   # script in Magnum/ folder
+juju scp Magnum/fix-flannel-final.py magnum/0:/tmp/
+juju ssh magnum/0 -- sudo python3 /tmp/fix-flannel-final.py [--dry-run]
 ```
+
+> **When it is lost:** the fragment lives in the **magnum apt package**
+> (`python3-magnum`), so it is reverted whenever that package is (re)installed —
+> i.e. an OpenStack upgrade, not merely `juju refresh`. Re-run the script after an
+> upgrade (`--dry-run` first if you want to see the change).
+>
+> **When it matters:** only for **new** cluster builds — the manifest is rendered
+> per node at bootstrap. Running clusters are unaffected.
 
 > The driver source path lives in the magnum package at
 > `/usr/lib/python3/dist-packages/magnum/`.
 
 ### What survives what
 
-| Fix | Survives reboot | Survives node replace | Survives `juju refresh` |
+| Fix | Survives reboot | Survives node replace | Survives charm refresh / pkg upgrade |
 |---|---|---|---|
 | Golden template labels | N/A (template) | N/A | yes (template) |
-| Flannel init container (rancher + wget) | ✓ (etcd) | ✓ (re-scheduled) | **re-patch** |
-| Flannel binary on nodes | ✓ (init container re-runs) | ✓ (init container re-runs) | ✓ (if template patched) |
+| Flannel init container (rancher + wget) | ✓ (etcd) | ✓ (re-scheduled) | **re-patch** (magnum pkg) |
+| Flannel binary on nodes | ✓ (init container re-runs) | ✓ (init container re-runs) | ✓ (if fragment patched) |
 | `cluster-user-trust=true` (juju config) | ✓ | ✓ | ✓ |
 | `heat_stack_user` role | ✓ | ✓ | ✓ |
 | Vault CA via `vault:certificates` relation | ✓ | ✓ | ✓ |
-| Keystone-v3 template patch (issue 2) | ✓ (charm dir) | ✓ | **re-patch** |
+| Keystone-v3 template patch (issue 2) | ✓ (charm dir) | ✓ | **re-patch** (charm) |
 | Golden cluster template (magnum DB) | ✓ | ✓ | ✓ |
 
 ---
 
-## 3. Remaining manual work after `juju refresh`
+## 3. Remaining manual work after charm refresh / magnum package upgrade
 
 ```bash
-# 1. re-patch flannel-service.sh on magnum/0 (unless already patched via action)
-juju ssh magnum/0 -- python3 fix-flannel-final.py
+# 1. re-patch flannel-service.sh on magnum/0 (idempotent; no-op if already final).
+#    The fragment lives in the python3-magnum package, so an OpenStack package
+#    upgrade reverts it — a charm-only refresh does not. See §2.
+juju scp Magnum/fix-flannel-final.py magnum/0:/tmp/
+juju ssh magnum/0 -- sudo python3 /tmp/fix-flannel-final.py --dry-run
+juju ssh magnum/0 -- sudo python3 /tmp/fix-flannel-final.py
 
 # 2. re-apply the keystone-v3 template patch and, if the rendered file is stale,
 #    the v2.0→v3 sed (see §1 canonical block)
@@ -190,13 +238,14 @@ create a test cluster before making it the default.
     and the pre-1.6 containerd default target pre-1.24. For k8s ≥1.24 you MUST override
     via template labels.
 11. **Flannel image `quay.io/coreos/flannel-cni:v0.3.0` is gone** — patch
-    `flannel-service.sh` to the rancher mirror (survives everything except
-    `juju refresh`).
+    `flannel-service.sh` with the idempotent script (handles all states; survives
+    reboots, reverted when the `python3-magnum` package is upgraded, not on a
+    charm-only `juju refresh`).
 
 **Permanent-fix recommendations (not done, noted for future work):**
 
-* Upstream the flannel image fix to `charm-magnum` so `install-cni-plugins` doesn't
-  need re-patching after refresh.
+* Upstream the flannel fragment fix to the **magnum** project so
+  `install-cni-plugins` doesn't need re-patching after a package upgrade.
 * Upstream the haproxy backend fix (LP #1943385 / #2058474), or switch to direct
   bind by setting `[api] host = 0.0.0.0`.
 * Add a charm action (e.g. `apply-template-fixes`) that re-applies all three fixes

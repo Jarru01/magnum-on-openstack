@@ -114,15 +114,22 @@ in the golden template.
 
 Nodes registered but stayed NotReady; three stacked issues:
 
-1. `quay.io/coreos/flannel-cni:v0.3.0` → **401** (tag effectively gone from quay).
-   The `install-cni-plugins` initContainer was replaced with a single init container
-   that copies `/flannel` from the rancher mirror image and downloads the standard
-   CNI plugins — the exact patch ships as [`fix-flannel-final.py`](fix-flannel-final.py).
+1. `quay.io/coreos/flannel-cni:v0.3.0` → **401** (repo gone from quay). The fragment
+   is label-driven (`flannel_cni_tag`, with prefix `container_infra_prefix` or
+   `quay.io/coreos/`), but no reachable image matches that name/layout today (see
+   [`../OpenStack/magnum-fixes-and-maintenance.md`](../OpenStack/magnum-fixes-and-maintenance.md)
+   §2), so the fragment was patched in place. The first iteration used
+   `busybox:1.36` + `wget` of the standard plugins — which exposed issue 3 — and the
+   final patch uses the rancher mirror image plus `cp /flannel`.
 2. containerd looked for plugins in `/usr/libexec/cni/` (its config.toml) while
    magnum installs to `/opt/cni/bin`; a bind mount alone is not enough — containerd
    caches the dir at startup (must restart containerd **and** kubelet).
-3. The standard plugins bundle lacks the `flannel` binary itself — extracted it on
-   each node from a rancher mirror image.
+3. The standard plugins bundle lacks the `flannel` binary itself — it ships in the
+   flannel-cni-plugin image, so the init container copies `/flannel` from the rancher
+   mirror to `/opt/cni/bin/flannel`.
+
+The patch has three recognised states (PRISTINE / BUSYBOX / FINAL) and the current
+[`fix-flannel-final.py`](fix-flannel-final.py) handles all of them idempotently.
 
 After kicking stuck pods (`kubectl delete pod --force --grace-period=0`) everything
 converged.

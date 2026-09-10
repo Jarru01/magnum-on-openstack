@@ -77,9 +77,9 @@ juju exec -m kis --unit magnum/0 -- sudo sed -i \
 
 The next config render then emits `auth_version = v3` automatically (verified: the
 patched template renders `v3` for both int `3` and string `"3"`). The patch is lost
-on `juju refresh` / `upgrade-charm`, so re-apply it afterwards (same as the flannel
-patch — see `../OpenStack/magnum-fixes-and-maintenance.md` §3). It does not rewrite
-the already-rendered file until the next relation change/reboot.
+on `juju refresh` / `upgrade-charm`, so re-apply it afterwards (see
+`../OpenStack/magnum-fixes-and-maintenance.md` §1 and §3). It does not rewrite the
+already-rendered file until the next relation change/reboot.
 
 **B. Correct the rendered file (immediate, but re-apply after every re-render):**
 
