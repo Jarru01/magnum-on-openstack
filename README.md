@@ -82,8 +82,9 @@ fallback when Cinder is absent.
 #### Solution
 
 Patch `{left:l=0}=r` → `{left:l=0}=r||{}` in the minified console JS on each Skyline
-unit, and also run `juju run skyline/leader regenerate-nginx` if Container Infra
-tabs were rendered before magnum existed.
+unit, and run `regenerate-nginx` on **every** Skyline unit (the nginx config is
+per-unit — running it on the leader only leaves the other units stale) if Container
+Infra tabs were rendered before magnum existed.
 [`Magnum/first-cluster-build-log.md`](Magnum/first-cluster-build-log.md).
 
 ### Issue 5: `openstack coe ...` empty reply / Skyline 502

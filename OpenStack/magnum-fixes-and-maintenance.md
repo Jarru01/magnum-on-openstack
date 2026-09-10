@@ -85,12 +85,14 @@ juju config magnum | grep cluster-user-trust   # expect: cluster-user-trust: "tr
 ## 4. Skyline Container Infra fixes (two upstream bugs)
 
 **Fix A — nginx config missing `container_infra` proxy location.** Skyline's nginx
-is generated from the keystone catalog at charm render time. After deploying any new
-service, regenerate:
+is generated from the keystone catalog at charm render time. After deploying a new
+service, or after a service's endpoint changes scheme (e.g. HTTP→HTTPS when magnum
+joins the certificates relation), regenerate on **every** Skyline unit — the config
+is per-unit, so a leader-only run leaves the other units stale:
 
 ```bash
-juju run skyline/leader regenerate-nginx
-# hard-refresh the browser after
+for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done
+# adjust unit numbers to match `juju status skyline`; hard-refresh the browser after
 ```
 
 **Fix B — upstream skyline-console JS bug (Create Cluster page error).**

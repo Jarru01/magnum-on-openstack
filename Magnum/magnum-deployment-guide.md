@@ -103,8 +103,9 @@ anchors).
 > public `9511`, terminating TLS at an apache2 vhost on `9501`, which proxies to
 > magnum-api on `9491` (public port −10 for apache, −20 for the API). The keystone
 > catalog endpoints are re-registered as `https://<unit>:9511/v1`. After enabling
-> it, regenerate Skyline's nginx so its magnum proxy uses HTTPS:
-> `juju run skyline/leader regenerate-nginx`.
+> it, regenerate Skyline's nginx **on every Skyline unit** (the config is per-unit):
+> `for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done`.
+> Then hard-refresh the browser.
 
 ---
 

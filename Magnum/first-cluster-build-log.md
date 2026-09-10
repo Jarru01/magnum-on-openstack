@@ -143,10 +143,13 @@ converged.
 ### Fix A — nginx config missing `container_infra` proxy location
 
 Skyline's nginx is generated from the keystone catalog **before magnum existed** —
-no `container_infra` proxy location. Regenerate it (and hard-refresh the browser):
+no `container_infra` proxy location. Regenerate it on **every** Skyline unit (the
+config is per-unit; the leader-only action leaves the others stale) and hard-refresh
+the browser:
 
 ```bash
-juju run skyline/leader regenerate-nginx
+for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done
+# (adjust unit numbers to match `juju status skyline`)
 ```
 
 ### Fix B — upstream skyline-console JS bug (Create Cluster page error)
