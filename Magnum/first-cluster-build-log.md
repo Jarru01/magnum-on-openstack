@@ -43,7 +43,7 @@ rm fedora-coreos-38.20230806.3.0-openstack.x86_64.qcow2   # reclaim space after 
 
 ```bash
 openstack coe cluster template create k8s-ct \
-  --image fedora-coreos-38.20230806.3.0-ca --external-network ext-net \
+  --image fedora-coreos-38.20230806.3.0 --external-network ext-net \
   --dns-nameserver 203.0.113.53 --keypair magnum-k8s \
   --master-flavor 2c2r20d --flavor 2c2r20d \
   --network-driver flannel --coe kubernetes \
@@ -83,12 +83,20 @@ juju config magnum cluster-user-trust=true
 #   v2.0→v3 fixes afterwards (canonical block: ../OpenStack/magnum-fixes-and-maintenance.md)
 ```
 
-### 1.3 Vault CA baked into a custom FCOS image
+### 1.3 Vault CA injection (now handled by the `vault:certificates` relation)
 
-The in-guest `heat-container-agent` (podman) failed TLS to keystone — stock FCOS
-lacks the Vault root CA. `virt-customize` is broken on Ubuntu (supermin), so the
-image was customized via `qemu-nbd` (baking the CA into the FCOS ostree root). The
-repeatable steps live in [`fcos-bake-ca.sh`](../OpenStack/fcos-bake-ca.sh).
+The in-guest `heat-container-agent` (podman) failed TLS to keystone because the
+cluster had no Vault root CA. **Root cause: magnum was deployed without relating
+its `certificates` endpoint to vault**, so `[drivers] openstack_ca_file` stayed
+unset and the Heat `openstack_ca` parameter — written to each node's user-data as
+`/etc/pki/ca-trust/source/anchors/openstack-ca.pem` — was empty.
+
+The interim workaround was baking the CA into a custom FCOS image. **That is no
+longer needed**: with `juju integrate vault:certificates magnum:certificates` the
+charm installs the CA and magnum injects it into every new cluster at boot, so a
+**stock** Fedora CoreOS image works (verified 2026-09-10 — a stock-image cluster
+reached `CREATE_COMPLETE / HEALTHY`). See
+[`magnum-deployment-guide.md`](magnum-deployment-guide.md) → Certificates.
 
 ### 1.4 Kubelet legacy flags (kube ≥1.24 removed them)
 

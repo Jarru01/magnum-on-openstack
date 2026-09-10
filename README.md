@@ -29,7 +29,6 @@ Document | Description
 [Architecture overview](OpenStack/architecture-overview.md) | How Magnum → Heat creates clusters, component maps
 [Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, no PVCs, LBaaS caveats
 [Flannel patch](Magnum/fix-flannel-final.py) | The patched `flannel-service.sh` — init container copies `/flannel` from the rancher mirror and fetches the standard CNI plugins, eliminating node-level CNI fixes
-[FCOS CA bake script](OpenStack/fcos-bake-ca.sh) | Re-baking the Vault root CA into a Fedora CoreOS image (`qemu-nbd`, no `virt-customize`)
 [Kubeconfig examples](Kubernetes/kubeconfig-dashboard-token.example.yaml) / [DNAT](Kubernetes/kubeconfig-dnat.example.yaml) | Ready templates for dashboard and DNAT kubeconfig files
 
 ## 🧯 Troubleshooting
@@ -89,13 +88,13 @@ tabs were rendered before magnum existed.
 
 ### Issue 5: `openstack coe ...` empty reply / Skyline 502
 
-Every other API works, only magnum fails. The charm re-rendered haproxy backend
-(and/or the v2.0 keystone paths) back to broken values after a config change,
-refresh, or reboot.
+Every other API works, only magnum fails. After a config change, refresh, or reboot
+the charm re-renders `magnum.conf` and reverts `keystone_authtoken` to the legacy
+`v2.0` paths, which breaks auth.
 
 #### Solution
 
-Re-apply the canonical haproxy + v2.0→v3 fix block:
+Re-apply the v2.0→v3 fix:
 [`OpenStack/magnum-fixes-and-maintenance.md`](OpenStack/magnum-fixes-and-maintenance.md)
 (and [`OpenStack/disaster-recovery.md`](OpenStack/disaster-recovery.md) after a reboot).
 

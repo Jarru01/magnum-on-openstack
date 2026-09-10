@@ -15,7 +15,7 @@ onboarding new projects/users, and for the permission model behind kubeconfig ac
 
 ```bash
 openstack coe cluster template create k8s-ct-golden \
-  --image fedora-coreos-38.20230806.3.0-ca --external-network ext-net \
+  --image fedora-coreos-38.20230806.3.0 --external-network ext-net \
   --dns-nameserver 203.0.113.53 --keypair magnum-k8s \
   --master-flavor 2c2r20d --flavor 2c2r20d \
   --network-driver flannel --coe kubernetes \

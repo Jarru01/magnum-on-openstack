@@ -13,23 +13,22 @@ remaining unit-level fixes are small and well understood.
 
 | # | Issue | Trigger | Fix | Re-triggered by |
 |---|---|---|---|---|
-| 1 | haproxy backend → wrong IP | deploy / config change / charm refresh / **reboot** | see canonical block below | `juju config magnum` any change, charm hook after reboot |
+| 1 | Missing `vault:certificates` relation → no CA installed; keystone TLS fails (503) and clusters boot without the OpenStack CA | deploy omission | `juju integrate vault:certificates magnum:certificates` | never (relation persists) |
 | 2 | Keystone auth uses `v2.0` paths | deploy (charm default) | see canonical block below | charm refresh, **reboot** |
 | 3 | `cluster-user-trust` defaults to false | deploy | `juju config magnum cluster-user-trust=true` | not re-triggered once set |
 | 4 | `heat_stack_user` role missing | first cluster ever (one-time) | `openstack role create heat_stack_user` | never (additive) |
 | 5 | All mysql-routers stale → read-only DB errors (500) on any write | deploy / DB failover / **reboot** | restart every `*-mysql-router.service` | DB primary change, **reboot** (see DR doc) |
 
-### Canonical fix block (issues 1 + 2)
+### Canonical fix block (issue 2)
 
 ```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i s/192.0.2.11:9501/127.0.0.1:9501/ /etc/haproxy/haproxy.cfg
-juju exec -m kis --unit magnum/0 -- sudo systemctl restart haproxy
 juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
 juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
 
 `cluster-user-trust` (issue 3) does not revert once set; the v2.0→v3 editor does not
-revert either — only haproxy.cfg is re-rendered back by charm hooks.
+revert either. (The old pre-TLS haproxy-backend bug is resolved by the TLS topology
+the certificates relation enables — see [`disaster-recovery.md`](disaster-recovery.md).)
 
 ---
 
@@ -65,7 +64,7 @@ juju ssh magnum/0 -- python3 fix-flannel-final.py   # script in Magnum/ folder
 | Flannel binary on nodes | ✓ (init container re-runs) | ✓ (init container re-runs) | ✓ (if template patched) |
 | `cluster-user-trust=true` (juju config) | ✓ | ✓ | ✓ |
 | `heat_stack_user` role | ✓ | ✓ | ✓ |
-| CA-baked FCOS image (Glance) | ✓ | ✓ | ✓ |
+| Vault CA via `vault:certificates` relation | ✓ | ✓ | ✓ |
 | Golden cluster template (magnum DB) | ✓ | ✓ | ✓ |
 
 ---
@@ -76,7 +75,7 @@ juju ssh magnum/0 -- python3 fix-flannel-final.py   # script in Magnum/ folder
 # 1. re-patch flannel-service.sh on magnum/0 (unless already patched via action)
 juju ssh magnum/0 -- python3 fix-flannel-final.py
 
-# 2. re-apply the canonical haproxy + v2.0→v3 fix block (§1)
+# 2. re-apply the canonical v2.0→v3 fix block (§1)
 # 3. verify cluster-user-trust persisted:
 juju config magnum | grep cluster-user-trust   # expect: cluster-user-trust: "true"
 ```
@@ -111,27 +110,25 @@ Apply to all occurrences in the minified JS on each Skyline unit, then remove st
 
 ## 5. Upgrading the Fedora CoreOS image (security updates)
 
-The CA-patched FCOS image can be upgraded to a newer version; existing clusters are
-**not affected** — only new clusters use the updated template.
+New clusters can boot a newer FCOS image; existing clusters are **not affected** —
+only new clusters use the updated template. No CA baking is involved (the CA comes
+from the `vault:certificates` relation and is injected via Heat at boot).
 
 ```bash
 # 1. download the new FCOS image (check https://builds.coreos.fedoraproject.org/)
 wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/39.XXXXX.X.X/x86_64/fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2.xz
 unxz -T0 fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2.xz
 
-# 2. patch CA certificates — see ../OpenStack/fcos-bake-ca.sh (or the documented
-#    qemu-nbd flow; partition/ostree layout may differ between FCOS major versions)
-
-# 3. upload the patched image to Glance
-openstack image create fedora-coreos-39.XXXXX.X.X-ca \
+# 2. upload it to Glance
+openstack image create fedora-coreos-39.XXXXX.X.X \
   --file fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2 \
   --disk-format qcow2 --container-format bare \
   --property os_distro=fedora-coreos
 
-# 4. point the golden template at it
-openstack coe cluster template set k8s-ct-golden --image "$(openstack image show fedora-coreos-39.XXXXX.X.X-ca -f value -c id)"
+# 3. point the golden template at it (magnumclient uses JSON-patch ops)
+openstack coe cluster template update k8s-ct-golden replace /image_id=<new-image-id>
 
-# 5. verify
+# 4. verify
 openstack coe cluster template show k8s-ct-golden -f value -c image_id
 ```
 
@@ -150,8 +147,11 @@ create a test cluster before making it the default.
 1. **Bobcat magnum + k8s 1.26 is a broken combination** — the Heat templates
    predate the 1.24 kubelet flag removal and don't configure CRI. `kube_tag`
    controls the k8s version but the templates assume pre-1.24 kubelet regardless.
-2. **`virt-customize` doesn't work on Ubuntu** (supermin failures); `qemu-nbd` is the
-   reliable alternative for image injection.
+2. **A missing `vault:certificates` relation silently breaks keystone TLS** — the
+   charm installs no CA on the unit and `[drivers] openstack_ca_file` stays unset, so
+   clusters boot with an empty `openstack_ca` and the in-guest agent fails TLS to
+   keystone. Relate vault from the start; never hand-copy the CA or bake it into an
+   image.
 3. **`containerd` caches CNI config at startup** — changing `bin_dir` requires a full
    restart, not just file replacement.
 4. **The standard CNI plugins tarball does NOT include `flannel`** — it's a separate

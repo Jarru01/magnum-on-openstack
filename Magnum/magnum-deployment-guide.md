@@ -22,6 +22,7 @@ juju integrate magnum-mysql-router:db-router mysql-innodb-cluster:db-router
 juju integrate magnum-mysql-router:shared-db magnum:shared-db
 juju integrate rabbitmq-server:amqp magnum:amqp
 juju integrate keystone:identity-service magnum:identity-service
+juju integrate vault:certificates magnum:certificates
 ```
 
 Result on the reference deployment: magnum rev **126** (magnum 17.0.1),
@@ -43,59 +44,67 @@ mysql-router rev **1154**, unit `magnum/0`, converged to `active` in ~8 minutes.
 
 ## 2. Post-deploy fixes required (charm quirks)
 
-### Fix 1 — haproxy backend targets the wrong address (upstream LP #1943385 / #2058474)
+### Fix 1 — API topology (haproxy → apache TLS → magnum-api)
 
-The charm fronts magnum-api with a local haproxy (`*:9511` → backend), but renders
-the backend as `server magnum-0 192.0.2.11:9501` while magnum binds `127.0.0.1:9501`
-only (upstream default `[api] host = 127.0.0.1`). Every request dies with an empty
-reply (exit code 52).
+With the `vault:certificates` relation (added in §1) magnum runs in the charm's TLS
+topology: haproxy binds the public port `9511` and TCP-passes to an apache2 TLS vhost
+on `9501`, which proxies to magnum-api on `9491`. Verify with `sudo ss -tlnp` on the
+unit.
 
-```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i s/192.0.2.11:9501/127.0.0.1:9501/ /etc/haproxy/haproxy.cfg
-juju exec -m kis --unit magnum/0 -- sudo systemctl restart haproxy
-```
+> **Historic (pre-TLS) bug:** without the relation, the charm rendered haproxy's
+> backend as the unit's IP while magnum-api bound `127.0.0.1:9501` only → every
+> request failed with an empty reply (upstream LP #1943385 / #2058474). The workaround
+> was `sed 's/[0-9.:]*:9501/127.0.0.1:9501/'` + restart haproxy. In the TLS topology
+> the backend targets apache on the unit IP:9501 and works, so this sed is **not**
+> needed — apply it only if a 502 actually recurs.
 
-> Re-apply after any event that re-renders `haproxy.cfg` (config/relation changes,
-> charm refresh, reboot). This is the **canonical** fix — other documents
-> cross-reference it instead of repeating it.
+### Fix 2 — keystone auth uses legacy `v2.0` paths (charm default)
 
-### Fix 2 — Vault CA not trusted + stale v2.0 URIs
-
-This charm line has no `certificates` endpoint, so nothing installs the Vault root
-CA into the unit's trust store. Token validation against the HTTPS keystone
-endpoint then fails (SSL `CERTIFICATE_VERIFY_FAILED` → API returns 503
-"Keystone service is temporarily unavailable"). The **canonical** fix:
-
-> **Where the CA file comes from:** `kisroot-ca.crt` is the cloud's Vault root CA
-> (`CN = Vault Root Certificate Authority (charm-pki-local)`, self-signed). It is
-> NOT created by this guide — it predates it: the retained anchor lives with the
-> openstack clients snap (`~/snap/openstackclients/common/kisroot-ca.crt`, from the
-> initial cloud deploy) and the working copy at `~/magnum-work/kisroot-ca.crt` was
-> copied from it. All copies are byte-identical (verified by SHA). If it is ever
-> lost, re-export the root from the deployed vault charm (`charm-pki-local` PKI)
-> rather than regenerating — regenerating would invalidate every service cert.
+The charm renders the legacy `v2.0` keystone paths regardless of the connected
+keystone API version. Correct them and restart the services:
 
 ```bash
-# 1. copy the Vault root CA into a plain-path temp dir (juju cannot read ~/snap/... paths):
-#    the working copy already exists on the cloud host at ~/magnum-work/kisroot-ca.crt;
-#    if absent, take it from the retained snap anchor:
-cp ~/snap/openstackclients/common/kisroot-ca.crt ~/magnum-work/kisroot-ca.crt
-juju scp -m kis ~/magnum-work/kisroot-ca.crt magnum/0:/tmp/kisroot-ca.crt
-
-# 2. install into the unit's trust store:
-juju exec -m kis --unit magnum/0 -- sudo cp /tmp/kisroot-ca.crt /usr/local/share/ca-certificates/kisroot-ca.crt
-juju exec -m kis --unit magnum/0 -- sudo update-ca-certificates
-
-# 3. correct the legacy v2.0 references the template renders:
 juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
 juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
 
-> NOTE: juju (snap) cannot read files under `~/snap/...` or `/tmp` of other
-> snaps/users — stage copies in plain `$HOME`. After `update-ca-certificates`,
-> `curl https://192.0.2.1:5000/v3` from the unit returns 200 (verified). The source
-> `.crt` in `/usr/local/share/ca-certificates/` may be removed later — the hashed
-> entry in `/etc/ssl/certs` persists and keystone still validates without `-k`.
+> Re-apply after any event that re-renders `magnum.conf` (config/relation changes,
+> `juju refresh`, reboot).
+
+### Certificates / OpenStack CA — via the `vault:certificates` relation
+
+Magnum's `certificates` endpoint (interface `tls-certificates`) must be related to
+the cloud's Vault PKI. This is **required** and is the only place the CA comes
+from — there is no manual step and no custom image:
+
+```bash
+juju integrate vault:certificates magnum:certificates
+```
+
+Once related, the charm automatically:
+
+* installs the Vault root CA into the unit's trust store
+  (`/usr/local/share/ca-certificates/magnum.crt` + `update-ca-certificates`), so
+  magnum-api can validate the HTTPS keystone endpoint. Without it, token validation
+  fails (`CERTIFICATE_VERIFY_FAILED` → API returns 503 "Keystone service is
+  temporarily unavailable");
+* renders `[drivers] openstack_ca_file` in `magnum.conf`.
+
+The magnum conductor passes that CA to every new cluster as the Heat
+`openstack_ca` parameter; the node user-data writes it to
+`/etc/pki/ca-trust/source/anchors/openstack-ca.pem` and trusts it via
+`update-ca-trust`. **A stock Fedora CoreOS image therefore works — no CA-baked
+image is needed** (verified 2026-09-10: a cluster built from the stock image was
+`CREATE_COMPLETE / HEALTHY`, with the Vault root CA present in the node's trust
+anchors).
+
+> **Enabling TLS also changes the API topology** (standard for the OpenStack
+> charms): `https()` flips true, so the charm shifts ports — haproxy keeps the
+> public `9511`, terminating TLS at an apache2 vhost on `9501`, which proxies to
+> magnum-api on `9491` (public port −10 for apache, −20 for the API). The keystone
+> catalog endpoints are re-registered as `https://<unit>:9511/v1`. After enabling
+> it, regenerate Skyline's nginx so its magnum proxy uses HTTPS:
+> `juju run skyline/leader regenerate-nginx`.
 
 ---
 

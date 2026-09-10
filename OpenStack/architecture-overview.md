@@ -46,6 +46,27 @@ containerd, and flannel at runtime.
 This is also where the `cluster_user_trust` bug lived: `template_def.py` only passed
 `trust_id` to Heat when the config flag was set — otherwise it was blank.
 
+## Certificate / CA flow (why the `vault:certificates` relation is required)
+
+Every OpenStack service on this cloud gets its TLS material from the Vault PKI via a
+`certificates` (interface `tls-certificates`) relation. Magnum is no exception:
+
+1. `juju integrate vault:certificates magnum:certificates` → the charm installs the
+   Vault root CA into the unit's trust store
+   (`/usr/local/share/ca-certificates/magnum.crt` + `update-ca-certificates`), so
+   magnum-api can validate the HTTPS keystone endpoint, and renders
+   `[drivers] openstack_ca_file` in `magnum.conf`.
+2. The magnum conductor reads that file (`magnum.common.utils.get_openstack_ca()`)
+   and passes it to Heat as the `openstack_ca` parameter.
+3. The Heat templates (`kubemaster.yaml` / `kubeminion.yaml`) substitute it into each
+   node's ignition user-data as `/etc/pki/ca-trust/source/anchors/openstack-ca.pem`;
+   `configure-agent-env.sh` runs `update-ca-trust` and copies the resulting bundle to
+   `/etc/kubernetes/ca-bundle.crt` for the heat-container-agent.
+
+Without the relation, `openstack_ca_file` is empty, clusters boot with no CA, and the
+in-guest agent fails TLS to keystone. **No manual CA copy or CA-baked image is
+needed** — a stock Fedora CoreOS image works.
+
 ## Infrastructure components
 
 | Component | What it does |

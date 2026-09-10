@@ -21,9 +21,10 @@ clusters are unaffected (images cached, etcd bootstrapped). Scheduling pods with
 * containerd **1.6.20** (EOL)
 * Fedora CoreOS **38.20230806.3.0** (Aug 2023)
 
-Runs reliably, but no upstream security fixes. Upgrading requires the manual FCOS
-re-bake (`magnum-fixes-and-maintenance.md` §5) plus a new `kube_tag` /
-`containerd_version` in the golden template — plan this periodically.
+Runs reliably, but no upstream security fixes. Upgrading means uploading a newer
+FCOS image and repointing the golden template (`magnum-fixes-and-maintenance.md`
+§5) plus matching `kube_tag` / `containerd_version` labels — plan this
+periodically.
 
 ## 3. No persistent storage (k8s PVCs unavailable)
 
