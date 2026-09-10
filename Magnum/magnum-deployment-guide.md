@@ -58,18 +58,35 @@ unit.
 > the backend targets apache on the unit IP:9501 and works, so this sed is **not**
 > needed — apply it only if a 502 actually recurs.
 
-### Fix 2 — keystone auth uses legacy `v2.0` paths (charm default)
+### Fix 2 — keystone auth renders legacy `v2.0` paths (upstream charm bug)
 
-The charm renders the legacy `v2.0` keystone paths regardless of the connected
-keystone API version. Correct them and restart the services:
+Keystone publishes `api_version` as an **integer** (`3`). Magnum's bundled keystone
+interface reads relation data through `charms.reactive`'s `JSONUnitDataView`, which
+JSON-decodes the value back to the integer `3`; the render template compares it to the
+string `"3"` (`{% if identity_service.api_version == "3" %}`), which is always `False`
+— so `magnum.conf` gets the legacy `v2.0` auth paths regardless of the connected
+keystone version.
+
+**A. Patch the render template once (recommended — survives reboots and re-renders):**
+
+```bash
+juju exec -m kis --unit magnum/0 -- sudo sed -i \
+  's/identity_service.api_version == "3"/identity_service.api_version|string == "3"/' \
+  /var/lib/juju/agents/unit-magnum-0/charm/templates/parts/keystone-authtoken
+```
+
+The next config render then emits `auth_version = v3` automatically (verified: the
+patched template renders `v3` for both int `3` and string `"3"`). The patch is lost
+on `juju refresh` / `upgrade-charm`, so re-apply it afterwards (same as the flannel
+patch — see `../OpenStack/magnum-fixes-and-maintenance.md` §3). It does not rewrite
+the already-rendered file until the next relation change/reboot.
+
+**B. Correct the rendered file (immediate, but re-apply after every re-render):**
 
 ```bash
 juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
 juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
-
-> Re-apply after any event that re-renders `magnum.conf` (config/relation changes,
-> `juju refresh`, reboot).
 
 ### Certificates / OpenStack CA — via the `vault:certificates` relation
 

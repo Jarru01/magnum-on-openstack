@@ -14,12 +14,27 @@ remaining unit-level fixes are small and well understood.
 | # | Issue | Trigger | Fix | Re-triggered by |
 |---|---|---|---|---|
 | 1 | Missing `vault:certificates` relation → no CA installed; keystone TLS fails (503) and clusters boot without the OpenStack CA | deploy omission | `juju integrate vault:certificates magnum:certificates` | never (relation persists) |
-| 2 | Keystone auth uses `v2.0` paths | deploy (charm default) | see canonical block below | charm refresh, **reboot** |
+| 2 | Keystone auth renders `v2.0` paths (int-vs-string bug) | deploy (charm bug) | patch the render template — see canonical block below | `juju refresh` (re-apply patch) |
 | 3 | `cluster-user-trust` defaults to false | deploy | `juju config magnum cluster-user-trust=true` | not re-triggered once set |
 | 4 | `heat_stack_user` role missing | first cluster ever (one-time) | `openstack role create heat_stack_user` | never (additive) |
 | 5 | All mysql-routers stale → read-only DB errors (500) on any write | deploy / DB failover / **reboot** | restart every `*-mysql-router.service` | DB primary change, **reboot** (see DR doc) |
 
 ### Canonical fix block (issue 2)
+
+Keystone publishes `api_version` as an **int**; the charm's keystone interface reads
+it via `charms.reactive`'s `JSONUnitDataView` (JSON-decodes `"3"` → int `3`), while
+the render template compares it to the string `"3"` → always renders `v2.0`. Patch
+the template once so every render emits `v3`:
+
+```bash
+juju exec -m kis --unit magnum/0 -- sudo sed -i \
+  's/identity_service.api_version == "3"/identity_service.api_version|string == "3"/' \
+  /var/lib/juju/agents/unit-magnum-0/charm/templates/parts/keystone-authtoken
+```
+
+The patch survives reboots and re-renders (it lives in the charm's `templates/`
+tree); it is lost on `juju refresh`/`upgrade-charm` — re-apply it (see §3). To fix the
+already-rendered file immediately (or after a refresh wiped the patch):
 
 ```bash
 juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
@@ -65,6 +80,7 @@ juju ssh magnum/0 -- python3 fix-flannel-final.py   # script in Magnum/ folder
 | `cluster-user-trust=true` (juju config) | ✓ | ✓ | ✓ |
 | `heat_stack_user` role | ✓ | ✓ | ✓ |
 | Vault CA via `vault:certificates` relation | ✓ | ✓ | ✓ |
+| Keystone-v3 template patch (issue 2) | ✓ (charm dir) | ✓ | **re-patch** |
 | Golden cluster template (magnum DB) | ✓ | ✓ | ✓ |
 
 ---
@@ -75,7 +91,8 @@ juju ssh magnum/0 -- python3 fix-flannel-final.py   # script in Magnum/ folder
 # 1. re-patch flannel-service.sh on magnum/0 (unless already patched via action)
 juju ssh magnum/0 -- python3 fix-flannel-final.py
 
-# 2. re-apply the canonical v2.0→v3 fix block (§1)
+# 2. re-apply the keystone-v3 template patch and, if the rendered file is stale,
+#    the v2.0→v3 sed (see §1 canonical block)
 # 3. verify cluster-user-trust persisted:
 juju config magnum | grep cluster-user-trust   # expect: cluster-user-trust: "true"
 ```

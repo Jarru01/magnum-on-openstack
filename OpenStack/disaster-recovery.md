@@ -44,15 +44,21 @@ done
 
 Verify: `openstack quota set --class default --instances 20` succeeds (a real write).
 
-### Magnum keystone `v2.0` paths (charm re-render) + TLS topology
+### Magnum keystone `v2.0` paths (charm render bug) + TLS topology
 
 magnum runs in the OpenStack charm's TLS topology (enabled by the
 `vault:certificates` relation): haproxy on the public port `9511` TCP-passes to an
-apache2 TLS vhost on `9501`, which proxies to magnum-api on `9491`. The charm
-re-renders `/etc/magnum/magnum.conf` on config/relation changes and reboots, and the
-`keystone_authtoken` section reverts to the legacy `v2.0` paths, which breaks auth
-(Skyline "Get clusters" → 502 / empty quota, `openstack coe ...` empty reply).
-Symptom signature: every other API service works, only magnum fails. Re-apply:
+apache2 TLS vhost on `9501`, which proxies to magnum-api on `9491`.
+
+The charm's `keystone-authtoken` template has an int-vs-string bug: keystone publishes
+`api_version` as an int and the interface JSON-decodes it back to int `3`, while the
+template compares to string `"3"` — so a render can emit the legacy `v2.0` paths,
+which breaks auth (Skyline "Get clusters" → 502 / empty quota, `openstack coe ...`
+empty reply; every other API service works). **Fix once** by patching the render
+template — see [`magnum-fixes-and-maintenance.md`](magnum-fixes-and-maintenance.md)
+§1. With the patch in place, re-renders emit `v3` automatically and a reboot needs no
+action. The patch is lost on `juju refresh`/`upgrade-charm`; if it was lost, either
+re-patch or correct the rendered file:
 
 ```bash
 juju ssh magnum/0 -- sudo sed -i 's/v2.0/v3/g' /etc/magnum/magnum.conf
@@ -95,7 +101,8 @@ OpenStack with routable FIPs there are no such rules to re-add.
 openstack server start k8s-test-<id>-master-0
 openstack server start k8s-test-<id>-node-0
 
-# 2. re-apply the magnum keystone v3 fix (charm re-render reverts it to v2.0)
+# 2. keystone v3 paths — only needed if the template patch (fixes §1) is missing,
+#    e.g. after a juju refresh; with the patch, re-renders already emit v3
 juju ssh magnum/0 -- sudo sed -i 's/v2.0/v3/g' /etc/magnum/magnum.conf
 juju ssh magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 
@@ -115,8 +122,9 @@ kubectl get pods -A | grep -v Running  # empty = all green
 openstack coe cluster list           # magnum API reachable again (no 502)
 ```
 
-> **Note:** recovery is *not* fully automatic — the magnum keystone-v3 fix (step 2)
-> and the mysql-router restarts (step 2b) must be re-applied after any
-> reboot/outage. The k8s-side recovery (flannel init container) IS automatic. The
+> **Note:** recovery is *not* fully automatic — the mysql-router restarts (step 2b)
+> must be re-applied after any reboot/outage. Step 2 (keystone v3) is only needed if
+> the template patch is missing (e.g. after `juju refresh`). The k8s-side recovery
+> (flannel init container) IS automatic. The template patch itself, the
 > `vault:certificates` relation, `cluster-user-trust` (juju config) and the
 > `heat_stack_user` role survive reboots.

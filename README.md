@@ -89,15 +89,16 @@ Infra tabs were rendered before magnum existed.
 
 ### Issue 5: `openstack coe ...` empty reply / Skyline 502
 
-Every other API works, only magnum fails. After a config change, refresh, or reboot
-the charm re-renders `magnum.conf` and reverts `keystone_authtoken` to the legacy
-`v2.0` paths, which breaks auth.
+Every other API works, only magnum fails. The charm's keystone template has an
+int-vs-string bug: keystone publishes `api_version` as an int, the interface
+JSON-decodes it to int `3`, but the template compares to string `"3"` — so renders
+emit the legacy `v2.0` auth paths, which breaks auth.
 
 #### Solution
 
-Re-apply the v2.0→v3 fix:
-[`OpenStack/magnum-fixes-and-maintenance.md`](OpenStack/magnum-fixes-and-maintenance.md)
-(and [`OpenStack/disaster-recovery.md`](OpenStack/disaster-recovery.md) after a reboot).
+Patch the render template once so all future renders emit `v3` (and correct the
+already-rendered file if needed):
+[`OpenStack/magnum-fixes-and-maintenance.md`](OpenStack/magnum-fixes-and-maintenance.md) §1.
 
 ## About
 
