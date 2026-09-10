@@ -133,9 +133,9 @@ kubectl get svc kubernetes-dashboard -n kube-system   # watch the EXTERNAL-IP co
 ```
 
 Pros: one patch, persistent URL, no maas access required. Verified 2026-09-10 (new LB
-provisioned `ACTIVE`/`ONLINE`, served HTTP 200, deleted cleanly). Caveat: a stale LB
-from an older attempt may remain in `ERROR` (see `OpenStack/limitations.md` #4) — it
-doesn't block new LBs.
+provisioned `ACTIVE`/`ONLINE`, served HTTP 200, deleted cleanly). For the full
+create/verify/cleanup procedure and how the LB balances (nodes → NodePort → pods):
+[`k8s-cluster-usage.md`](k8s-cluster-usage.md) → External `LoadBalancer` services.
 
 ### Option 2b — `kubectl proxy` / `port-forward` (zero infra, single-user, per use)
 

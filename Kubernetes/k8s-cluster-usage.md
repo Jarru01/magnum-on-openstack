@@ -170,6 +170,67 @@ kubectl autoscale deployment <app> --cpu-percent=50 --min=1 --max=4
 kubectl get hpa <app> -w
 ```
 
+### External `LoadBalancer` services (Octavia, verified)
+
+`openstack-cloud-controller-manager` (OCCM) turns any `type: LoadBalancer` Service
+into an Octavia amphora load balancer: a VIP on the cluster's internal subnet plus a
+floating IP on the external network. No extra OpenStack role is needed to
+create/delete LB-backed Services.
+
+**Architecture — what it actually balances:** Octavia's pool members are the
+**cluster nodes**, not the pods. Each member is a node's internal IP on the Service's
+`NodePort`; `kube-proxy` on that node then forwards to one of the Service's pods:
+
+```
+client -> <floating-ip>:80 -> Octavia amphora (VIP, ROUND_ROBIN)
+       -> node-ip:<nodePort> -> kube-proxy -> pod
+```
+
+Consequences:
+
+* Adding/removing a cluster node updates the LB pool automatically; scaling pods
+  does not (only kube-proxy's view changes underneath).
+* By default **every** node is a member (masters included). Narrow it with the
+  `node-selector` OCCM option, the `loadbalancer.openstack.org/node-selector`
+  annotation, or the `node.kubernetes.io/exclude-from-external-load-balancers` label.
+* `externalTrafficPolicy: Cluster` (default) lets any node forward to any pod; with
+  `Local`, only nodes running a local pod serve traffic (client IP preserved) and the
+  health monitor removes the rest.
+* The health monitor (enabled in this cloud's OCCM config) probes the node port, so a
+  failed node is drained after `monitor-delay` x `monitor-max-retries` (1 m x 3 here).
+
+**Create, verify, clean up:**
+
+```bash
+# 1. a workload to expose
+kubectl create deployment lb-test --image=nginx
+kubectl expose deployment lb-test --port=80 --type=LoadBalancer
+
+# 2. wait for the floating IP (first provision ~2-4 min while the amphora boots)
+kubectl get svc lb-test -w          # EXTERNAL-IP: <pending> -> <floating-ip>
+
+# 3. (optional, CLI) watch the Octavia LB; its name is
+#    kube_service_<cluster-uuid>_<namespace>_<service>
+openstack loadbalancer list         # PENDING_CREATE/OFFLINE -> ACTIVE/ONLINE
+
+# 4. verify end-to-end
+curl -s -o /dev/null -w '%{http_code}\n' http://<floating-ip>/     # expect 200
+# lab topology: if the floating IP is not routable from your PC, run the curl from a
+# cluster node instead (both returned 200 when verified)
+
+# 5. cleanup — deleting the Service deletes the Octavia LB
+kubectl delete svc lb-test
+kubectl delete deployment lb-test
+openstack loadbalancer list | grep lb-test || echo "LB removed"    # ~15-30 s
+```
+
+> Verified 2026-09-10 on a fresh 2-node cluster: the pool had 2 members (the nodes),
+> the LB reached `ACTIVE`/`ONLINE`, served HTTP 200, and was removed with the Service.
+>
+> If OCCM keeps logging `Resource not found` delete retries after a Service is
+> removed, clear its workqueue by restarting the pod:
+> `kubectl -n kube-system delete pod -l k8s-app=openstack-cloud-controller-manager`.
+
 ---
 
 ## 4. SSH to cluster nodes (operator only)

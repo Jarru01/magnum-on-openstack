@@ -35,14 +35,12 @@ users.
 
 ## 4. `type: LoadBalancer` services (verified working)
 
-`openstack-cloud-controller-manager` provisions Octavia LBs. **Verified 2026-09-10**
-on a fresh cluster: a `type: LoadBalancer` Service got an `ACTIVE`/`ONLINE` amphora
-LB with a floating IP, served HTTP 200, and was deleted cleanly when the Service was
-removed (relevant to the dashboard Option 2a — see `Kubernetes/kubernetes-dashboard.md`).
+`openstack-cloud-controller-manager` provisions Octavia LBs: a `type: LoadBalancer`
+Service gets an `ACTIVE`/`ONLINE` amphora LB with a floating IP. **Verified
+2026-09-10** on a fresh cluster (provisioned → served HTTP 200 → deleted cleanly with
+the Service). Reproducible procedure + architecture:
 
-Note: a stale LB from an older attempt can remain stuck in `ERROR` (seen:
-`test-web-lb`, `ONLINE` operating but `ERROR` provisioning). It doesn't block new
-LBs; delete it manually once nothing references it.
+See `Kubernetes/k8s-cluster-usage.md` → External `LoadBalancer` services.
 
 ---
 
