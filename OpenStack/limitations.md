@@ -40,7 +40,7 @@ Service gets an `ACTIVE`/`ONLINE` amphora LB with a floating IP. **Verified
 2026-09-10** on a fresh cluster (provisioned → served HTTP 200 → deleted cleanly with
 the Service). Reproducible procedure + architecture:
 
-See `Kubernetes/k8s-cluster-usage.md` → External `LoadBalancer` services.
+See `../Kubernetes/k8s-cluster-usage.md` → External `LoadBalancer` services.
 
 ---
 

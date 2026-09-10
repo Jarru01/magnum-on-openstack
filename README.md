@@ -27,7 +27,7 @@ Document | Description
 [Magnum fixes & maintenance](OpenStack/magnum-fixes-and-maintenance.md) | Recurring charm quirks, the flannel fix, Skyline Container Infra fixes, FCOS upgrades, lessons learned
 [Disaster recovery](OpenStack/disaster-recovery.md) | Power outage / full reboot procedure
 [Architecture overview](OpenStack/architecture-overview.md) | How Magnum → Heat creates clusters, component maps
-[Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, no PVCs, LBaaS caveats
+[Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, no PVCs, LoadBalancer verified
 [Flannel patch](Magnum/fix-flannel-final.py) | The patched `flannel-service.sh` — init container copies `/flannel` from the rancher mirror and fetches the standard CNI plugins, eliminating node-level CNI fixes
 [Kubeconfig examples](Kubernetes/kubeconfig-dashboard-token.example.yaml) / [DNAT](Kubernetes/kubeconfig-dnat.example.yaml) | Ready templates for dashboard and DNAT kubeconfig files
 

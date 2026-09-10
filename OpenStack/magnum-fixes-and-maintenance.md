@@ -246,7 +246,8 @@ create a test cluster before making it the default.
 
 * Upstream the flannel fragment fix to the **magnum** project so
   `install-cni-plugins` doesn't need re-patching after a package upgrade.
-* Upstream the haproxy backend fix (LP #1943385 / #2058474), or switch to direct
-  bind by setting `[api] host = 0.0.0.0`.
-* Add a charm action (e.g. `apply-template-fixes`) that re-applies all three fixes
-  after `juju refresh`: `juju run magnum/0 apply-template-fixes`.
+* Upstream the keystone `v2.0`-render fix (the int-vs-string template comparison)
+  so the render patch doesn't need re-applying after `juju refresh`.
+* Add a charm action (e.g. `apply-template-fixes`) that re-applies the flannel and
+  keystone fixes after a refresh/package upgrade:
+  `juju run magnum/0 apply-template-fixes`.

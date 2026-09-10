@@ -79,8 +79,10 @@ had `TRUST_ID=""` although the trust existed in the magnum DB. Fix (charm-expose
 ```bash
 juju config magnum cluster-user-trust=true
 
-# ⚠ config change re-renders unit files → re-apply the haproxy backend and
-#   v2.0→v3 fixes afterwards (canonical block: ../OpenStack/magnum-fixes-and-maintenance.md)
+# ⚠ config change re-renders unit files → re-apply the v2.0→v3 fix afterwards.
+#   (Historical: the pre-TLS haproxy-backend fix was also re-rendered; it is obsolete
+#   now that the certificates relation puts magnum in the TLS topology. Canonical
+#   block: ../OpenStack/magnum-fixes-and-maintenance.md)
 ```
 
 ### 1.3 Vault CA injection (now handled by the `vault:certificates` relation)
