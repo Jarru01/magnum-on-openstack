@@ -33,12 +33,16 @@ Cinder CSI driver is not installed. **Kubernetes PVCs have no storage class/prov
 Workloads can only use `emptyDir`/`hostPath`. Do not promise PV-backed storage to
 users.
 
-## 4. `type: LoadBalancer` services may fail
+## 4. `type: LoadBalancer` services (verified working)
 
-`openstack-cloud-controller-manager` runs and would provision Octavia LBs, but a
-pre-existing Octavia LB can be stuck in `ERROR`. LBaaS-backed services are possible
-but should be tested per-cluster before relying on them (relevant to the dashboard
-Option 2a — see `Kubernetes/kubernetes-dashboard.md`).
+`openstack-cloud-controller-manager` provisions Octavia LBs. **Verified 2026-09-10**
+on a fresh cluster: a `type: LoadBalancer` Service got an `ACTIVE`/`ONLINE` amphora
+LB with a floating IP, served HTTP 200, and was deleted cleanly when the Service was
+removed (relevant to the dashboard Option 2a — see `Kubernetes/kubernetes-dashboard.md`).
+
+Note: a stale LB from an older attempt can remain stuck in `ERROR` (seen:
+`test-web-lb`, `ONLINE` operating but `ERROR` provisioning). It doesn't block new
+LBs; delete it manually once nothing references it.
 
 ---
 

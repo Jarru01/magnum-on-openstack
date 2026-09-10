@@ -20,8 +20,9 @@ Pick any login method with any exposure method; they don't interact.
 | Expose | 2c — NodePort + maas nft DNAT | **yes** | maas rule per cluster | public HTTPS |
 
 The route verified on the reference cluster is **1a + 2c**. `2a` (Octavia) is the
-preferred operator-free exposure for future clusters but must be tested against the
-cloud's Octavia first (see `OpenStack/limitations.md` #4). All dashboard sessions run
+preferred operator-free exposure and is **verified** on this cloud (2026-09-10: a
+`type: LoadBalancer` service provisions an `ACTIVE`/`ONLINE` amphora LB with a
+floating IP — see `OpenStack/limitations.md` #4). All dashboard sessions run
 over the pod's self-signed TLS cert — the browser will warn; accept it.
 
 ---
@@ -131,9 +132,10 @@ kubectl get svc kubernetes-dashboard -n kube-system   # watch the EXTERNAL-IP co
 # browse: https://<EXTERNAL-IP>   (accept the self-signed cert)
 ```
 
-Pros: one patch, persistent URL, no maas access required. Caveat: Octavia may have a
-pre-existing LB in `ERROR` (see `OpenStack/limitations.md` #4) — test LB creation on
-a fresh cluster before relying on it.
+Pros: one patch, persistent URL, no maas access required. Verified 2026-09-10 (new LB
+provisioned `ACTIVE`/`ONLINE`, served HTTP 200, deleted cleanly). Caveat: a stale LB
+from an older attempt may remain in `ERROR` (see `OpenStack/limitations.md` #4) — it
+doesn't block new LBs.
 
 ### Option 2b — `kubectl proxy` / `port-forward` (zero infra, single-user, per use)
 

@@ -157,6 +157,19 @@ kubectl exec test-nginx -- cat /etc/os-release
 kubectl delete pod test-nginx
 ```
 
+### Autoscaling & metrics (verified)
+
+`magnum-metrics-server` is deployed by default, so `kubectl top nodes` / `kubectl top
+pods` return real numbers and HorizontalPodAutoscalers act on CPU. Verified
+2026-09-10 on a fresh cluster: an HPA (`--cpu-percent=50 --min=1 --max=4`) scaled
+`1→3` under load and back to `1` after the default 5-minute scale-down stabilization
+window.
+
+```bash
+kubectl autoscale deployment <app> --cpu-percent=50 --min=1 --max=4
+kubectl get hpa <app> -w
+```
+
 ---
 
 ## 4. SSH to cluster nodes (operator only)
