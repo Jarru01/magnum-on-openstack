@@ -41,24 +41,16 @@ rm fedora-coreos-38.20230806.3.0-openstack.x86_64.qcow2   # reclaim space after 
 
 ## 1. The five defects
 
-```bash
-openstack coe cluster template create k8s-ct \
-  --image fedora-coreos-38.20230806.3.0 --external-network ext-net \
-  --dns-nameserver 203.0.113.53 --keypair magnum-k8s \
-  --master-flavor 2c2r20d --flavor 2c2r20d \
-  --network-driver flannel --coe kubernetes \
-  --labels kube_tag=v1.26.8-rancher1
-openstack coe cluster create k8s-test --cluster-template k8s-ct --master-count 1 --node-count 1
-```
+> **Historical template note:** the original build used an interim `k8s-ct` template
+> (labels: `kube_tag` only — no containerd labels, not `--public`) and created the
+> cluster `k8s-test`. Its command is intentionally omitted here to avoid confusion —
+> the canonical, current create command is in
+> [`golden-cluster-template.md`](golden-cluster-template.md) §1. The cluster was later
+> recreated from the golden template (2026-08-28, containerd 1.6.20).
 
 Final state (original build): **CREATE_COMPLETE / HEALTHY**, both nodes `Ready`
 (v1.26.8, containerd 1.6.19), all kube-system pods Running, test deployment
-(`nginx:alpine`) Running.
-
-> Note: the original build used the interim `k8s-ct` template and ran containerd
-> 1.6.19 (charm default). The current `k8s-test` was recreated from the **golden**
-> template on 2026-08-28 and runs **containerd 1.6.20** with the same kube/flannel
-> stack — version numbers above are historical.
+(`nginx:alpine`) Running. Version numbers here are historical.
 
 Getting there required fixing five separate defects — each verified before moving on:
 

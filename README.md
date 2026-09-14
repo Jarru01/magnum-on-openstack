@@ -8,14 +8,35 @@ Guides, configuration files and notes on deploying the OpenStack **Magnum**
 > The golden cluster template bakes in every known fix, so users create clusters
 > with zero SSH and zero manual node surgery.
 
-> **Note on addresses:** values in these guides use reserved documentation ranges
-> (RFC 5737) and `<placeholders>` — not the live cloud's addresses or passwords.
+> **Note on addresses:** IPs in these guides use reserved documentation ranges
+> (RFC 5737); replaceable values — including **names** such as the external network,
+> DNS resolver, keypair, image and flavor — are written in `<angle brackets>`. They
+> are examples, not the live cloud's addresses or passwords. The golden template
+> includes a "replace the placeholders" table.
 
 > **Topology note:** this is a **reference/lab cloud** — its cluster FIPs are not
 > routable from outside, so some guides include MAAS `nft` DNAT workarounds.
 > On production OpenStack with routable FIPs those steps do not apply.
 
-## 📚 Documents in this repository
+## 🚀 Start here — getting Magnum fully working
+
+Read these four in order — they take you from a deployed cloud to a working cluster:
+
+1. [Magnum deployment guide](Magnum/magnum-deployment-guide.md) — deploy the service
+   (including the `vault:certificates` relation), the post-deploy fixes, and the
+   trustee domain setup.
+2. [Magnum fixes & maintenance](OpenStack/magnum-fixes-and-maintenance.md) §1–3 — the
+   recurring unit-level fixes to keep in place (keystone v3 + the flannel fragment
+   patch).
+3. [Golden cluster template](Magnum/golden-cluster-template.md) — create the
+   cloud-wide template and onboard a project/user.
+4. [Cluster usage (kubectl)](Kubernetes/k8s-cluster-usage.md) — download the
+   kubeconfig and use the cluster.
+
+Optional next steps: [Kubernetes dashboard](Kubernetes/kubernetes-dashboard.md) ·
+[Known limitations](OpenStack/limitations.md).
+
+## 📚 Reference (all documents)
 
 Document | Description
 --- | ---

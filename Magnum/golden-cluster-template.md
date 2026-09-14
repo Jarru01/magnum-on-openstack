@@ -15,15 +15,28 @@ onboarding new projects/users, and for the permission model behind kubeconfig ac
 
 ```bash
 openstack coe cluster template create k8s-ct-golden \
-  --image fedora-coreos-38.20230806.3.0 --external-network ext-net \
-  --dns-nameserver 203.0.113.53 --keypair magnum-k8s \
-  --master-flavor 2c2r20d --flavor 2c2r20d \
+  --image <fcos-image> --external-network <external-network> \
+  --dns-nameserver <dns-resolver> --keypair <keypair> \
+  --master-flavor <flavor> --flavor <flavor> \
   --network-driver flannel --coe kubernetes \
   --labels kube_tag=v1.26.8-rancher1,container_runtime=containerd,containerd_version=1.6.20,containerd_tarball_sha256=1d86b534c7bba51b78a7eeb1b67dd2ac6c0edeb01c034cc5f590d5ccd824b416 \
   --public
 ```
 
 `--public` makes it visible to **all projects**. Drop it for project-scoped use.
+
+### Replace the placeholders
+
+| Placeholder | Replace with | Reference cloud |
+|---|---|---|
+| `<fcos-image>` | Fedora CoreOS image in Glance (**stock** — no CA bake needed; the certificates relation injects the CA at boot) | `fedora-coreos-38.20230806.3.0` |
+| `<external-network>` | the cloud's external (public) network name | `ext-net-154` |
+| `<dns-resolver>` | DNS resolver reachable from the cluster nodes | the DNS your cloud's instances use |
+| `<keypair>` | keypair **owned by the account that creates the cluster** (keypairs are per-user) | `magnum-k8s` |
+| `<flavor>` | master and worker flavor, `2c2r20d`-or-larger | `2c2r20d` |
+
+> Keep the `--labels` value exactly as shown — those labels are the fixes that make
+> k8s 1.26 work on this driver.
 
 ### Key labels explained
 
@@ -72,6 +85,13 @@ the access path. If a user needs node SSH, the operator must create a per-user
 template copy (private or project-scoped) with `--keypair <their-keypair>`; a
 plain `member` cannot fork a public template themselves. `magnum-k8s.pem` stays
 operator-only in all cases.
+
+> **Creating the keypair:** either flow works — the CLI (`openssl`/`ssh-keygen` +
+> `openstack keypair create`, as in the build log) or Skyline's *Keypair → Create*
+> (save the private key when it is shown; it is not retrievable later). The CLI keeps
+> the private key local to your machine. Either way the keypair must be **owned by
+> the account that creates the cluster**, and the template's `--keypair` must
+> reference it.
 
 ### Cluster visibility vs. keypair scoping
 
