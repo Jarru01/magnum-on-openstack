@@ -26,12 +26,16 @@ FCOS image and repointing the golden template (`magnum-fixes-and-maintenance.md`
 §5) plus matching `kube_tag` / `containerd_version` labels — plan this
 periodically.
 
-## 3. No persistent storage (k8s PVCs unavailable)
+## 3. Persistent storage (PVCs) — cloud-dependent
 
-No Cinder/Swift is deployed and the template has no `volume_driver=cinder`, so the
-Cinder CSI driver is not installed. **Kubernetes PVCs have no storage class/provider.**
-Workloads can only use `emptyDir`/`hostPath`. Do not promise PV-backed storage to
-users.
+* **Reference cloud:** no Cinder/Swift is deployed and the template has no
+  `volume_driver=cinder`, so the Cinder CSI driver is not installed. **Kubernetes
+  PVCs have no storage class/provider.** Workloads can only use `emptyDir`/`hostPath`.
+  Do not promise PV-backed storage to users here.
+* **Clouds with Cinder v3:** add `--volume-driver cinder` to the cluster template
+  (plus a StorageClass **per cluster** — Magnum ships none). **Verified 2026-10** on
+  a Cinder-capable cloud: PVC `Bound` → Pod mounted → volume attached in Cinder.
+  Procedure: `../Kubernetes/k8s-cluster-usage.md` → Persistent storage.
 
 ## 4. `type: LoadBalancer` services (verified working)
 
@@ -42,9 +46,26 @@ the Service). Reproducible procedure + architecture:
 
 See `../Kubernetes/k8s-cluster-usage.md` → External `LoadBalancer` services.
 
+**Cloud prerequisite:** this needs Octavia in the catalog. On clouds without Octavia,
+`LoadBalancer` Services stay `<pending>` (see `cloud-prerequisites.md` §3).
+
+## 5. etcd durability (no backup procedure provided)
+
+etcd holds all cluster state. In this deployment it runs on the **master's local
+disk** by default; on Cinder-capable clouds the `etcd_volume_size` cluster label can
+put it on a Cinder volume (survives a master VM/hypervisor loss, but the volume is
+**deleted with the cluster**, and the label is create-time only — enabling it means
+recreating the cluster). Neither option protects against logical corruption or
+mistakes, and **no etcd snapshot/backup procedure is documented yet** — treat this as
+the main durability gap for long-lived clusters.
+
+Availability note: use **1 or 3 masters, never 2** (quorum). With 3 masters etcd is
+replicated and tolerates one failure; the Cinder etcd volume then becomes optional
+rather than required.
+
 ---
 
-## Not deployed (context)
+## Not deployed (reference cloud — context)
 
 * **Cinder / Swift** — no block/object storage; drives #3 above.
 * **Designate zones** — service idle; the cluster's `discovery_url` uses the public
