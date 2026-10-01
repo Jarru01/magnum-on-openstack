@@ -186,3 +186,21 @@ idempotency.
 | `kubeconfig/config` | kubectl credentials |
 | `kubectl` (v1.26.8) | Matching kubectl binary |
 | `kisroot-ca.crt` | Vault root CA — working copy at `~/magnum-work/kisroot-ca.crt`; retained anchor `~/snap/openstackclients/common/` (from the initial cloud deploy, Apr) |
+
+---
+
+## 4. Postscript — later storage work
+
+The "no Cinder/Swift" constraints in this log describe the **reference cloud**.
+Later work (2026-09/10) added the storage layers on a Cinder-capable cloud:
+
+* a cluster-template variant with `--volume-driver cinder` deploys the Cinder CSI
+  driver; a StorageClass is still needed **per cluster** (Magnum ships none);
+* the optional `etcd_volume_size` label puts etcd on a Cinder volume mounted at
+  `/var/lib/etcd` (`etcd_volume_type` selects the volume type).
+
+Both were verified end-to-end (PVC `Bound` → Pod mounted → volume attached; etcd
+volume mounted with data on it). See
+[`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) →
+Persistent storage, [`../OpenStack/architecture-overview.md`](../OpenStack/architecture-overview.md)
+→ Storage model, and [`../OpenStack/cloud-prerequisites.md`](../OpenStack/cloud-prerequisites.md).

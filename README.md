@@ -34,6 +34,7 @@ Read these four in order — they take you from a deployed cloud to a working cl
    kubeconfig and use the cluster.
 
 Optional next steps: [Kubernetes dashboard](Kubernetes/kubernetes-dashboard.md) ·
+[Cloud prerequisites](OpenStack/cloud-prerequisites.md) ·
 [Known limitations](OpenStack/limitations.md).
 
 ## 📚 Reference (all documents)
@@ -46,9 +47,10 @@ Document | Description
 [Cluster usage (kubectl)](Kubernetes/k8s-cluster-usage.md) | Getting the kubeconfig (CLI & Skyline), installing kubectl, reachability workarounds (lab topology), production access model
 [Kubernetes dashboard](Kubernetes/kubernetes-dashboard.md) | Logging in (token / skip) and exposing the dashboard (Octavia LB / proxy / NodePort+DNAT)
 [Magnum fixes & maintenance](OpenStack/magnum-fixes-and-maintenance.md) | Recurring charm quirks, the flannel fix, Skyline Container Infra fixes, FCOS upgrades, lessons learned
-[Disaster recovery](OpenStack/disaster-recovery.md) | Power outage / full reboot procedure
-[Architecture overview](OpenStack/architecture-overview.md) | How Magnum → Heat creates clusters, component maps
-[Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, no PVCs, LoadBalancer verified
+[Disaster recovery](OpenStack/disaster-recovery.md) | Power outage / full reboot procedure, etcd durability notes
+[Architecture overview](OpenStack/architecture-overview.md) | How Magnum → Heat creates clusters, component maps, storage model
+[Cloud prerequisites](OpenStack/cloud-prerequisites.md) | What a target cloud must provide (API reachability, egress, Cinder/Octavia/Barbican) + symptom table
+[Known limitations](OpenStack/limitations.md) | Internet dependency, EOL stack, storage/PVCs by cloud, etcd backups, LoadBalancer verified
 [Flannel patch](Magnum/fix-flannel-final.py) | The patched `flannel-service.sh` — init container copies `/flannel` from the rancher mirror and fetches the standard CNI plugins, eliminating node-level CNI fixes
 [Kubeconfig examples](Kubernetes/kubeconfig-dashboard-token.example.yaml) / [DNAT](Kubernetes/kubeconfig-dnat.example.yaml) | Ready templates for dashboard and DNAT kubeconfig files
 
@@ -120,6 +122,37 @@ emit the legacy `v2.0` auth paths, which breaks auth.
 Patch the render template once so all future renders emit `v3` (and correct the
 already-rendered file if needed):
 [`OpenStack/magnum-fixes-and-maintenance.md`](OpenStack/magnum-fixes-and-maintenance.md) §1.
+
+### Issue 6: Cluster build stalls — nodes can't reach the OpenStack APIs
+
+Cluster sits at `master_config_deployment`; on the master,
+`sudo podman logs heat-container-agent` shows
+`Error communicating with http://<heat>:<port>/...` and `Source [heat]
+Unavailable`. The public Keystone/Heat endpoints are not reachable from the tenant
+network — the agent authenticates to Keystone with a baked `auth_url` and resolves
+Heat through the catalog `publicURL`.
+
+#### Solution
+
+Route/firewall the **public** Keystone and Heat API addresses (Keystone 5000; Heat
+**8000 and 8004**) to the cluster networks, then let the agent retry (or restart it:
+`sudo systemctl restart heat-container-agent`). Verify with `curl` from the master —
+**not** `ping` (ICMP is commonly dropped while the TCP API ports work). Full
+checklist: [`OpenStack/cloud-prerequisites.md`](OpenStack/cloud-prerequisites.md).
+
+### Issue 7: Node can't pull the agent image (no egress)
+
+`heat-container-agent.service` is `failed` and no container exists;
+`journalctl -u heat-container-agent` shows
+`pinging container registry registry-1.docker.io: i/o timeout`. New nodes need
+internet egress for the agent image, k8s binaries, CNI and CSI images. The unit has
+no `Restart=`, so it stays failed even after egress returns.
+
+#### Solution
+
+Restore egress (or build the cluster on a network that has it), then restart the
+unit on the node: `sudo systemctl restart heat-container-agent`. If the cluster
+already timed out, delete and recreate it.
 
 ## About
 
