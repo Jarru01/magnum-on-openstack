@@ -14,6 +14,8 @@ Everything that survives, everything that does not, and the recovery procedure.
 * k8s cluster VMs — shut down cleanly; power back on with `openstack server start`.
 * Flannel DaemonSet init-container patch (rancher + wget) — persists in etcd, so it
   **does** come back automatically after nodes recover.
+* A Cinder etcd volume (clusters using `etcd_volume_size`) — persists with the rest
+  of Cinder; it is deleted only when the cluster itself is deleted.
 
 ## What does NOT survive (re-apply after every outage/reboot)
 
@@ -91,6 +93,26 @@ The exposure rules added per [`k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-
 are **not persistent** — re-add them after a maas reboot. These rules exist only
 because the reference cloud's FIPs are not routable from outside; on production
 OpenStack with routable FIPs there are no such rules to re-add.
+
+---
+
+## etcd cluster state (backups — concept)
+
+etcd holds all Kubernetes state. It is **not replicated on a single master**:
+
+* Default: etcd data lives on the master's **local disk** (`/var/lib/etcd`).
+* On Cinder-capable clouds, the `etcd_volume_size` cluster label puts it on a Cinder
+  volume mounted at `/var/lib/etcd` — this survives a master VM/hypervisor loss
+  (reattach), but the volume **is deleted with the cluster**, and enabling it is
+  create-time only (a recreate).
+
+In both cases, **backups are mandatory** for long-lived clusters: etcd snapshots
+taken from the master and copied off-cluster are the canonical protection against
+logical corruption, accidental deletion, or losing the controller. No snapshot or
+restore procedure is documented yet — validate the commands on a live master before
+relying on them, and remember that restoring etcd is **destructive** (it rolls the
+whole cluster back in time). Availability: use 1 or 3 masters (never 2); with 3
+masters etcd is replicated (quorum 2) and the Cinder etcd volume becomes optional.
 
 ---
 

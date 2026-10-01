@@ -23,6 +23,15 @@ openstack coe cluster create
   → Nodes discover each other and form a k8s cluster
 ```
 
+**Node → API reachability:** each node's `heat-container-agent` authenticates to
+**Keystone** with the `auth_url` Magnum baked into its user-data (taken from the
+catalog's **public** identity endpoint), then resolves **Heat** from the catalog with
+`endpoint_type=publicURL` (hardcoded in `os-collect-config`) and polls the stack's
+resource metadata for its deployment configs. Magnum's own Heat client also uses
+`publicURL`. The cloud's public Keystone + Heat endpoints must therefore be reachable
+from the tenant networks. Checklist:
+[`cloud-prerequisites.md`](cloud-prerequisites.md).
+
 ## Heat templates (on the magnum unit)
 
 The templates are part of the magnum package at
@@ -109,10 +118,27 @@ needed** — a stock Fedora CoreOS image works.
 | **FCOS** | Fedora CoreOS — the OS inside each node VM |
 | **podman** | Container engine inside FCOS nodes (runs heat-container-agent) |
 
+## Storage model (what lives where)
+
+| Data | Default | Optional Cinder-backed |
+|---|---|---|
+| Node OS / root disk | image-backed, **ephemeral** | `boot_volume_size` (label; default `0`) |
+| Container / image storage | node local disk | `--docker-volume-size` (template field) |
+| etcd data (per master) | master's local disk | `etcd_volume_size` (cluster label) |
+| Application data (PVCs) | none | `--volume-driver cinder` + a per-cluster StorageClass |
+
+Node disks are cattle: nodes are rebuilt from the image + Heat config, so nothing
+durable should live on them. PVCs are the durable layer for workloads; the optional
+etcd volume improves control-plane durability but is **deleted with the cluster** —
+backups remain mandatory. See
+[`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) →
+Persistent storage and [`limitations.md`](limitations.md) §5.
+
 ## Constraints that shaped the design
 
-* **No Cinder/Swift** → cluster templates must NOT use `--docker-volume-size` (needs
-  Cinder volumes) and `registry_enabled` stays off.
+* **No Cinder/Swift on the reference cloud** → its cluster templates must NOT use
+  `--docker-volume-size` / `--volume-driver cinder`, and `registry_enabled` stays
+  off. Cinder-capable clouds can use them (see Storage model above).
 * Charm channel must match the cloud: `magnum --channel 2023.2/stable`
   (`magnum-k8s` is the Kubernetes-hosted variant and NOT applicable here).
 * On MAAS clouds every deploy needs explicit placement (`--to lxd:N`), otherwise
