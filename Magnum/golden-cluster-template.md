@@ -106,6 +106,22 @@ Error from server (InternalError): ... Internal error occurred: resource quota e
 status_reason: deploy_status_code : Deployment exited with non-zero status code: 1
 ```
 
+### HA masters
+
+Use **1 or 3 masters, never 2** (quorum). Magnum **requires `--master-lb-enabled`
+when `master_count > 1`**, and the master LB needs **Octavia** in the cloud — without
+it the create is rejected (`master_count must be 1 when master_lb_enabled is False`),
+and the legacy neutron-lbaas path is gone from modern OpenStack. Multi-master
+checklist:
+
+* Octavia present (`openstack endpoint list --service octavia`) and with capacity.
+* `--master-count 3 --master-lb-enabled` at cluster create (master count is
+  immutable afterwards; node count can be scaled later).
+* Allow a longer build: `--timeout 90`.
+* The kubeconfig/API endpoint becomes the LB's floating IP.
+* With `etcd_volume_size`, **each master gets its own etcd volume** (3× the storage;
+  volumes are deleted with the cluster — backups still required).
+
 ---
 
 ## 2. New project/user onboarding checklist

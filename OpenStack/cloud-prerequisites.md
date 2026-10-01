@@ -81,7 +81,7 @@ delete and recreate the cluster.
 | Service | Unlocks | If missing |
 |---|---|---|
 | **Cinder v3** | Persistent volumes (PVCs) via the Cinder CSI driver, optional per-node container volumes, optional etcd volumes | No PVCs. Do **not** set `--volume-driver cinder` — the CSI driver would deploy but cannot work. See [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) → Persistent storage |
-| **Octavia** | `type: LoadBalancer` Services (OCCM) | `LoadBalancer` Services stay `<pending>`; OCCM logs `Claiming to support LoadBalancer` but has no endpoint to use |
+| **Octavia** | `type: LoadBalancer` Services (OCCM) **and multi-master clusters** (Magnum requires a master LB when `master_count > 1`) | `LoadBalancer` Services stay `<pending>` (OCCM logs `Claiming to support LoadBalancer` but has no endpoint to use), and `master_count > 1` creates are rejected: `master_count must be 1 when master_lb_enabled is False` |
 | **Barbican** | OCCM secret features (e.g. LB TLS secrets); Magnum's default `cert_manager_type=barbican` | OCCM logs `Failed to create an OpenStack Secret client ... No suitable endpoint` — benign unless those features are needed. On clouds without Barbican, deploy Magnum with `cert_manager_type=x509keypair` |
 
 Cinder CSI additionally needs a StorageClass **per cluster** — Magnum ships none (see

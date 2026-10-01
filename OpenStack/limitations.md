@@ -61,7 +61,8 @@ the main durability gap for long-lived clusters.
 
 Availability note: use **1 or 3 masters, never 2** (quorum). With 3 masters etcd is
 replicated and tolerates one failure; the Cinder etcd volume then becomes optional
-rather than required.
+rather than required. Multi-master additionally requires Octavia (Magnum mandates a
+master LB for `master_count > 1`) — see `cloud-prerequisites.md` §3.
 
 ---
 
