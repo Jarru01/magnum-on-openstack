@@ -241,7 +241,20 @@ Notes:
   `etcd_volume_size` etcd volume) live on Cinder. See
   [`../OpenStack/architecture-overview.md`](../OpenStack/architecture-overview.md)
   → Storage model.
-* Deleting the PVC deletes the Cinder volume with `reclaimPolicy: Delete`.
+* Deleting the PVC deletes the Cinder volume with `reclaimPolicy: Delete`; use a
+  `Retain` StorageClass for data that must outlive its PVC.
+* **Delete PVCs before deleting the cluster.** CSI-provisioned volumes are not Heat
+  resources — `openstack coe cluster delete` only cleans up Octavia LBs, so a live
+  PVC leaves an **orphaned `pvc-*` volume** in Cinder. After any cluster teardown,
+  check `openstack volume list` and remove orphans.
+* **Snapshots need extra install**: the CSI manifest ships the snapshotter sidecar
+  but no snapshot CRDs/controller, so `VolumeSnapshot`s do not work out of the box.
+  Use Cinder-native backups (`openstack volume backup create`) or install the
+  snapshot CRDs + snapshot-controller yourself.
+* **Multi-AZ clouds**: this example StorageClass binds `Immediate` with
+  `availability: nova`. On a multi-AZ cloud use `volumeBindingMode:
+  WaitForFirstConsumer` and match (or drop) the AZ — or set `ignore-volume-az=true`
+  in the CSI cloud-config — otherwise a rescheduled pod can get stuck on attach.
 * If the PVC stays `Pending`, inspect `kubectl describe pvc` and
   `kubectl -n kube-system logs deploy/csi-cinder-controllerplugin -c cinder-csi-plugin`;
   a common cause is a StorageClass `availability` that does not match the Cinder AZ.

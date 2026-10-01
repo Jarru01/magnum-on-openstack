@@ -55,9 +55,12 @@ etcd holds all cluster state. In this deployment it runs on the **master's local
 disk** by default; on Cinder-capable clouds the `etcd_volume_size` cluster label can
 put it on a Cinder volume (survives a master VM/hypervisor loss, but the volume is
 **deleted with the cluster**, and the label is create-time only — enabling it means
-recreating the cluster). Neither option protects against logical corruption or
-mistakes, and **no etcd snapshot/backup procedure is documented yet** — treat this as
-the main durability gap for long-lived clusters.
+recreating the cluster). Recovery is manual: the Cinder volume survives an in-place
+master VM rebuild (Heat keeps the volume and reattaches it), but there is no
+automatic master repair — if the master is lost, the control plane stays down until
+the VM is rebuilt/recovered by hand. Neither option protects against logical
+corruption or mistakes, and **no etcd snapshot/backup procedure is documented yet** —
+treat this as the main durability gap for long-lived clusters.
 
 Availability note: use **1 or 3 masters, never 2** (quorum). With 3 masters etcd is
 replicated and tolerates one failure; the Cinder etcd volume then becomes optional

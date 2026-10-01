@@ -83,17 +83,23 @@ delete and recreate the cluster.
 | **Cinder v3** | Persistent volumes (PVCs) via the Cinder CSI driver, optional per-node container volumes, optional etcd volumes | No PVCs. Do **not** set `--volume-driver cinder` — the CSI driver would deploy but cannot work. See [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) → Persistent storage |
 | **Octavia** | `type: LoadBalancer` Services (OCCM) **and multi-master clusters** (Magnum requires a master LB when `master_count > 1`) | `LoadBalancer` Services stay `<pending>` (OCCM logs `Claiming to support LoadBalancer` but has no endpoint to use), and `master_count > 1` creates are rejected: `master_count must be 1 when master_lb_enabled is False` |
 | **Barbican** | OCCM secret features (e.g. LB TLS secrets); Magnum's default `cert_manager_type=barbican` | OCCM logs `Failed to create an OpenStack Secret client ... No suitable endpoint` — benign unless those features are needed. On clouds without Barbican, deploy Magnum with `cert_manager_type=x509keypair` |
+| **Manila** | Shared (**RWX**) volumes via the Manila CSI driver | Cinder volumes are RWO-only, so there is no RWX. Magnum does **not** deploy a Manila CSI driver — installing one on clouds that offer the share service is manual work |
 
 Cinder CSI additionally needs a StorageClass **per cluster** — Magnum ships none (see
 [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md)).
 
-## 4. Endpoint exposure notes
+## 4. Endpoint & topology notes
 
 * "Public" in the catalog only means "the interface clients are expected to use".
   Whether it is reachable from tenant VMs is a cloud-topology question (routing,
   NAT, firewall, or a public VIP). The build depends on it (§1).
 * Prefer exposing only the required API addresses/ports to tenant networks rather
   than the whole management network.
+* **Multi-AZ clouds:** Cinder volumes are AZ-scoped and the Heat templates pin
+  masters/volumes to the template's `availability_zone`. Keep nodes and volumes in a
+  compatible AZ and use `volumeBindingMode: WaitForFirstConsumer` in StorageClasses
+  (see [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) →
+  Persistent storage); multi-AZ HA is not handled automatically by the Heat driver.
 * Verified 2026-09 on a second OpenStack cloud (Cinder present; no Octavia/Barbican):
   after the public Keystone + Heat endpoints were made reachable from the cluster
   network, clusters built and reached `CREATE_COMPLETE / HEALTHY`.
