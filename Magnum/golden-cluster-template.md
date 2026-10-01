@@ -7,11 +7,14 @@ onboarding new projects/users, and for the permission model behind kubeconfig ac
 
 > Companion docs: [`first-cluster-build-log.md`](first-cluster-build-log.md) explains
 > *why* each label exists; [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md)
-> covers using a finished cluster.
+> covers using a finished cluster; [`../OpenStack/cloud-prerequisites.md`](../OpenStack/cloud-prerequisites.md)
+> lists what the cloud itself must provide.
 
 ---
 
 ## 1. The golden template (canonical create command)
+
+### Cloud without Cinder (reference cloud)
 
 ```bash
 openstack coe cluster template create k8s-ct-golden \
@@ -22,6 +25,31 @@ openstack coe cluster template create k8s-ct-golden \
   --labels kube_tag=v1.26.8-rancher1,container_runtime=containerd,containerd_version=1.6.20,containerd_tarball_sha256=1d86b534c7bba51b78a7eeb1b67dd2ac6c0edeb01c034cc5f590d5ccd824b416 \
   --public
 ```
+
+### Cloud with Cinder (persistent volumes)
+
+Add `--volume-driver cinder` to deploy the Cinder CSI driver, and optionally
+`etcd_volume_size` to put etcd on a Cinder volume:
+
+```bash
+openstack coe cluster template create k8s-ct-golden-cinder \
+  --image <fcos-image> --external-network <external-network> \
+  --dns-nameserver <dns-resolver> --keypair <keypair> \
+  --master-flavor <flavor> --flavor <flavor> \
+  --network-driver flannel --coe kubernetes \
+  --volume-driver cinder \
+  --labels kube_tag=v1.26.8-rancher1,container_runtime=containerd,containerd_version=1.6.20,containerd_tarball_sha256=1d86b534c7bba51b78a7eeb1b67dd2ac6c0edeb01c034cc5f590d5ccd824b416,etcd_volume_size=10 \
+  --public
+```
+
+Notes:
+
+* Only use `--volume-driver cinder` on a cloud that actually has the Cinder v3 API —
+  otherwise the CSI driver deploys but cannot work. CSI additionally needs a
+  **StorageClass per cluster** (Magnum ships none) — see
+  [`../Kubernetes/k8s-cluster-usage.md`](../Kubernetes/k8s-cluster-usage.md) →
+  Persistent storage.
+* `etcd_volume_size` is optional; 5–10 GB is plenty for etcd.
 
 `--public` makes it visible to **all projects**. Drop it for project-scoped use.
 
@@ -50,6 +78,21 @@ openstack coe cluster template create k8s-ct-golden \
 The flannel CNI fix lives in the `flannel-service.sh` template fragment on the
 magnum unit; see [`magnum-fixes-and-maintenance.md`](../OpenStack/magnum-fixes-and-maintenance.md)
 and [`fix-flannel-final.py`](fix-flannel-final.py).
+
+### Storage & capacity options
+
+| Option | Kind | What it does | Notes |
+|---|---|---|---|
+| `--volume-driver cinder` | template field | Deploys the Cinder CSI driver (`cinder.csi.openstack.org`); gated by `cinder_csi_enabled` (label, default `true`) | Required for PVCs; needs Cinder v3 + a per-cluster StorageClass. Omit on clouds without Cinder |
+| `cinder_csi_enabled` | label | Gate for the CSI driver | Only effective together with `volume_driver=cinder` |
+| `etcd_volume_size` / `etcd_volume_type` | cluster labels | Cinder volume per master for etcd, mounted at `/var/lib/etcd` | Create-time only (recreate to change); the volume is **deleted with the cluster** → backups still required |
+| `--docker-volume-size` | template field | Cinder volume per node for container/image storage | Local disk is used when unset |
+| `boot_volume_size` | label | Boot node root from a Cinder volume | Default `0` = image-backed (ephemeral) root |
+
+Node root disks are **ephemeral by design** (nodes are rebuilt from the image +
+Heat config); only PVCs and — optionally — the etcd volume provide durability. Full
+storage model: [`../OpenStack/architecture-overview.md`](../OpenStack/architecture-overview.md)
+→ Storage model.
 
 ### Minimum flavors
 

@@ -170,12 +170,97 @@ kubectl autoscale deployment <app> --cpu-percent=50 --min=1 --max=4
 kubectl get hpa <app> -w
 ```
 
+### Persistent storage (Cinder CSI, verified)
+
+Clusters built from a template with `--volume-driver cinder` on a cloud with the
+Cinder v3 API get the out-of-tree Cinder CSI driver: `cinder.csi.openstack.org`, a
+controller Deployment on the master and a node-plugin DaemonSet. **Magnum does not
+create a StorageClass** — reclaim policy and availability zone are site choices — so
+create one **per cluster**.
+
+Preflight:
+
+```bash
+kubectl get csidrivers                  # cinder.csi.openstack.org
+kubectl get pods -A | grep csi          # csi-cinder-controllerplugin / csi-cinder-nodeplugin
+kubectl get sc                          # empty on a new cluster
+```
+
+Create a StorageClass:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cinder-csi
+provisioner: cinder.csi.openstack.org
+parameters:
+  availability: nova        # must match the Cinder availability zone
+reclaimPolicy: Delete       # use Retain if volumes must outlive their PVCs
+allowVolumeExpansion: true
+```
+
+Then a PVC + Pod test (save as `storage-test.yaml` and apply it):
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: test-pvc}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: cinder-csi
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: test-pvc-pod}
+spec:
+  containers:
+  - name: c
+    image: busybox:1.36
+    command: ["sh","-c","echo ok > /data/x && cat /data/x && sleep 3600"]
+    volumeMounts: [{name: v, mountPath: /data}]
+  volumes: [{name: v, persistentVolumeClaim: {claimName: test-pvc}}]
+```
+
+Expected: PVC `Bound`, Pod `Running`, and the volume attaches to whichever node runs
+the Pod:
+
+```bash
+kubectl get pvc test-pvc
+kubectl get pod test-pvc-pod -o wide
+kubectl exec test-pvc-pod -- cat /data/x     # prints: ok
+openstack volume list                        # new pvc-<uuid> volume, in-use
+```
+
+Notes:
+
+* `ReadWriteOnce` volumes attach to **one node at a time** — the node running the
+  consuming Pod. Multiple Pods on that same node can share it.
+* Node root disks stay **ephemeral** (image-backed); only PVCs (and, optionally, an
+  `etcd_volume_size` etcd volume) live on Cinder. See
+  [`../OpenStack/architecture-overview.md`](../OpenStack/architecture-overview.md)
+  → Storage model.
+* Deleting the PVC deletes the Cinder volume with `reclaimPolicy: Delete`.
+* If the PVC stays `Pending`, inspect `kubectl describe pvc` and
+  `kubectl -n kube-system logs deploy/csi-cinder-controllerplugin -c cinder-csi-plugin`;
+  a common cause is a StorageClass `availability` that does not match the Cinder AZ.
+* Verified 2026-10 on a Cinder-capable cloud (PVC `Bound` → Pod mounted → volume in
+  Cinder and attached to the node in Skyline). Unavailable on the reference cloud
+  (no Cinder) — see [`../OpenStack/limitations.md`](../OpenStack/limitations.md).
+
 ### External `LoadBalancer` services (Octavia, verified)
 
 `openstack-cloud-controller-manager` (OCCM) turns any `type: LoadBalancer` Service
 into an Octavia amphora load balancer: a VIP on the cluster's internal subnet plus a
 floating IP on the external network. No extra OpenStack role is needed to
 create/delete LB-backed Services.
+
+> **Cloud prerequisite:** Octavia must be registered in the catalog
+> (`openstack endpoint list --service octavia`). On clouds without Octavia,
+> `LoadBalancer` Services stay `<pending>` and OCCM logs `Claiming to support
+> LoadBalancer` without an endpoint to use — see
+> [`../OpenStack/cloud-prerequisites.md`](../OpenStack/cloud-prerequisites.md) §3.
 
 **Architecture — what it actually balances:** Octavia's pool members are the
 **cluster nodes**, not the pods. Each member is a node's internal IP on the Service's

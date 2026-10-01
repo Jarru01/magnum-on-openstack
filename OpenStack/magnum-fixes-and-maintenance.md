@@ -241,6 +241,11 @@ create a test cluster before making it the default.
     `flannel-service.sh` with the idempotent script (handles all states; survives
     reboots, reverted when the `python3-magnum` package is upgraded, not on a
     charm-only `juju refresh`).
+12. **CSI image tags come from template labels** — the Cinder CSI plugin and its
+    sidecars (`cinder_csi_plugin_tag`, `csi_attacher_tag`, `csi_provisioner_tag`, …)
+    default to older releases. If CSI pods fail to pull or start on a newer k8s
+    version, bump those labels in the cluster template and recreate the cluster; the
+    `enable-cinder-csi.sh` fragment itself needs no patching.
 
 **Permanent-fix recommendations (not done, noted for future work):**
 
