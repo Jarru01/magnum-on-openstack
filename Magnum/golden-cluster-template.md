@@ -122,6 +122,29 @@ checklist:
 * With `etcd_volume_size`, **each master gets its own etcd volume** (3× the storage;
   volumes are deleted with the cluster — backups still required).
 
+### Auto-healing & auto-scaling (leave off)
+
+Both are template flags, **off by default** — keep them off on this deployment:
+
+* **Auto-scaling** (`auto_scaling_enabled`) deploys
+  `openstackmagnum/cluster-autoscaler:v1.18.1` — a k8s-1.18-era autoscaler against
+  this cloud's k8s 1.26 — and scales the `default-worker` nodegroup through the
+  **Magnum API** (the Magnum public endpoint must be reachable from the cluster, plus
+  trust credentials). Defaults are risky: `min_node_count=0` (it can scale workers
+  down to **zero** under low load) and `max_node_count` falls back to `node_count + 1`.
+* **Auto-healing** (`auto_healing_enabled`) with the default controller `draino`
+  only cordons/drains unhealthy nodes — it does **not** repair/replace them, and the
+  draino path additionally deploys the same old autoscaler. True replacement needs
+  `auto_healing_controller=magnum-auto-healer`: a DaemonSet on the **masters** that
+  deletes unhealthy nodes via the Magnum API — useful mainly with 3 masters, since a
+  single master cannot heal itself.
+
+Neither is validated in this repository. Use the manual path (watch → `kubectl
+drain` → replace/scale via Magnum; mind the +1-node rule). If you must experiment,
+use a disposable cluster with `min_node_count=1`, an explicit `max_node_count`, the
+Magnum API allowed from the cluster network, and expect to bump `autoscaler_tag` /
+`magnum_auto_healer_tag`.
+
 ---
 
 ## 2. New project/user onboarding checklist
