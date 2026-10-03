@@ -21,10 +21,19 @@ clusters are unaffected (images cached, etcd bootstrapped). Scheduling pods with
 * containerd **1.6.20** (EOL)
 * Fedora CoreOS **38.20230806.3.0** (Aug 2023)
 
-Runs reliably, but no upstream security fixes. Upgrading means uploading a newer
-FCOS image and repointing the golden template (`magnum-fixes-and-maintenance.md`
-§5) plus matching `kube_tag` / `containerd_version` labels — plan this
-periodically.
+Runs reliably, but no upstream security fixes.
+
+**Version ceilings (2026-10):** the `k8s_fedora_coreos_v1` heat driver in this
+Magnum release is Yoga-era and caps Kubernetes at **1.26** — k8s 1.27 removed
+`--container-runtime`, which the templates pass unconditionally, and the
+`kubelet_options` label can only append options, not remove them. The driver is
+also deprecated and removed in newer Magnum releases, so no upstream fixes will
+arrive. A newer FCOS image (44.20260913.3.2 was tested end-to-end through master
+bootstrap) boots only with three package shims — the CA bundle path, containerd
+tarball extraction through the `/usr/local` symlink, and curl's default CAfile —
+which we deliberately chose **not** to maintain; FCOS stays 38. Treat this stack
+as frozen: real modernization means a newer Magnum release + CAPI driver (or
+different tooling), not an FCOS bump.
 
 ## 3. Persistent storage (PVCs) — cloud-dependent
 
