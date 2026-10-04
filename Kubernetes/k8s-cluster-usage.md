@@ -329,6 +329,42 @@ openstack loadbalancer list | grep lb-test || echo "LB removed"    # ~15-30 s
 > removed, clear its workqueue by restarting the pod:
 > `kubectl -n kube-system delete pod -l k8s-app=openstack-cloud-controller-manager`.
 
+### Master API/etcd load balancer (multi-master, verified 2026-10-04)
+
+With `--master-lb-enabled`, Magnum creates **two** Octavia load balancers for the
+cluster itself (separate from the OCCM-managed Service LBs above):
+
+* **`api_lb`** — VIP on the cluster's private network **plus a floating IP**;
+  listener TCP **6443**; pool members are the masters. Magnum's `api_address`
+  (and the kubeconfig `server:`) becomes this LB's floating IP.
+* **`etcd_lb`** — internal VIP only (**no floating IP**); listener TCP **2379**;
+  pool members are the masters.
+
+Verified 2026-10-04 on a **3-master / 2-worker** cluster (k8s 1.26):
+
+* both LBs `ACTIVE`/`ONLINE`; the `api_lb` pool had **3 members (the masters),
+  all `ONLINE`**; health monitors are TCP;
+* `curl -k https://<lb-fip>:6443/healthz` → `ok`;
+* workers' kubelet `server: https://<lb-vip>:6443`, masters' kubelet
+  `https://127.0.0.1:6443` (local), kubeconfig `server:` = the LB floating IP;
+* etcd formed **3 members** (one per master).
+
+Verify with:
+
+```bash
+openstack coe cluster show <cluster> -f value -c master_lb_enabled -c api_address -c master_addresses
+openstack loadbalancer list -f value -c name -c vip_address -c provisioning_status -c operating_status
+openstack loadbalancer status show <api_lb-id>      # listeners/pools/members
+openstack loadbalancer member list <api-pool-id>    # members ONLINE
+curl -k https://<lb-fip>:6443/healthz               # ok
+# on a master (etcd loopback is plain HTTP):
+sudo podman exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
+```
+
+The TCP health monitor removes a failed master from rotation — **failover was not
+tested** (by choice), but the wiring (3 members, monitor) is in place. Requires
+Octavia in the cloud — see [`../OpenStack/cloud-prerequisites.md`](../OpenStack/cloud-prerequisites.md) §3.
+
 ---
 
 ## 4. SSH to cluster nodes (operator only)

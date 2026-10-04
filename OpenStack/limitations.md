@@ -55,6 +55,10 @@ the Service). Reproducible procedure + architecture:
 
 See `../Kubernetes/k8s-cluster-usage.md` → External `LoadBalancer` services.
 
+The **master LB** created by `--master-lb-enabled` (`api_lb` on 6443 with a
+floating IP + internal `etcd_lb` on 2379) is also verified — 2026-10-04 on a
+3-master cluster, all pool members `ONLINE`.
+
 **Cloud prerequisite:** this needs Octavia in the catalog. On clouds without Octavia,
 `LoadBalancer` Services stay `<pending>` (see `cloud-prerequisites.md` §3).
 

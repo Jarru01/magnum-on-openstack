@@ -122,6 +122,13 @@ checklist:
 * With `etcd_volume_size`, **each master gets its own etcd volume** (3× the storage;
   volumes are deleted with the cluster — backups still required).
 
+**Verified 2026-10-04:** a 3-master / 2-worker cluster built with
+`--master-lb-enabled` produced `api_lb` (VIP + FIP, listener 6443) and `etcd_lb`
+(internal VIP, listener 2379), both `ACTIVE`/`ONLINE`, with all 3 masters `ONLINE`
+as pool members; `curl -k https://<lb-fip>:6443/healthz` returned `ok`, and etcd
+formed 3 members. Details + commands:
+`../Kubernetes/k8s-cluster-usage.md` → Master API/etcd load balancer.
+
 ### Auto-healing & auto-scaling (leave off)
 
 Both are template flags, **off by default** — keep them off on this deployment:
@@ -139,7 +146,16 @@ Both are template flags, **off by default** — keep them off on this deployment
   deletes unhealthy nodes via the Magnum API — useful mainly with 3 masters, since a
   single master cannot heal itself.
 
-Neither is validated in this repository. Use the manual path (watch → `kubectl
+**Observed 2026-10-04** (enabled on a 3-master cluster): `draino` deployed and ran
+(workers get the `draino-enabled=true` label), and `cluster-autoscaler` reached the
+Magnum API (it found the stack) — but it **crash-looped**:
+`Could not parse node group spec 0:3:default-worker: invalid node group spec: min
+size must be >= 1`. Cause: `min_node_count` was unset, so it defaults to **0**,
+which the autoscaler's Magnum provider rejects. If you ever enable autoscaling,
+set `min_node_count` to at least **1** (plus an explicit `max_node_count`) at
+cluster create.
+
+Neither is recommended in this repository. Use the manual path (watch → `kubectl
 drain` → replace/scale via Magnum; mind the +1-node rule). If you must experiment,
 use a disposable cluster with `min_node_count=1`, an explicit `max_node_count`, the
 Magnum API allowed from the cluster network, and expect to bump `autoscaler_tag` /
