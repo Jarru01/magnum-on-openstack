@@ -80,6 +80,20 @@ replicated and tolerates one failure; the Cinder etcd volume then becomes option
 rather than required. Multi-master additionally requires Octavia (Magnum mandates a
 master LB for `master_count > 1`) — see `cloud-prerequisites.md` §3.
 
+## 6. CSI image registry drift (future risk)
+
+Cinder CSI works today (verified 2026-10), but its images are aging:
+`k8scloudprovider/cinder-csi-plugin:v1.23.0` from Docker Hub and the sidecars
+(`csi-attacher`, `csi-provisioner`, …) from **`k8s.gcr.io`**, which is deprecated
+and only redirects to `registry.k8s.io`. If that redirect or the old tags
+disappear, **new** cluster builds (and nodes rebuilt from scratch) would fail to
+pull the CSI images; running clusters keep working until then.
+
+Fix if it ever breaks: bump the CSI labels (`cinder_csi_plugin_tag`,
+`csi_attacher_tag`, `csi_provisioner_tag`, …) and/or mirror the images to your own
+registry and set `container_infra_prefix` in the cluster template, then recreate
+the cluster — see `magnum-fixes-and-maintenance.md` §6 (lesson 12).
+
 ---
 
 ## Not deployed (reference cloud — context)
