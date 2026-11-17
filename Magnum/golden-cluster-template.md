@@ -156,7 +156,8 @@ set `min_node_count` to at least **1** (plus an explicit `max_node_count`) at
 cluster create.
 
 Neither is recommended in this repository. Use the manual path (watch → `kubectl
-drain` → replace/scale via Magnum; mind the +1-node rule). If you must experiment,
+drain` → replace/scale via Magnum, resizing by +1 node at a time — a policy of this
+project, not a Magnum limit). If you must experiment,
 use a disposable cluster with `min_node_count=1`, an explicit `max_node_count`, the
 Magnum API allowed from the cluster network, and expect to bump `autoscaler_tag` /
 `magnum_auto_healer_tag`.
