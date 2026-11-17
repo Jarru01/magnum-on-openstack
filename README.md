@@ -76,18 +76,22 @@ for cloud administrators. Full permission model + options:
 ### Issue 2: Cluster delete fails for a `member` user
 
 Delete → *"Failed to pre-delete resources for cluster … Policy does not allow this
-request to be performed. (HTTP 403)"*. Teardown lists the cluster's Octavia load
-balancers with the user's token, which requires `load-balancer_member` **and**
-`member`.
+request to be performed. (HTTP 403)"*. Only on clouds with **Octavia** in the
+Keystone catalog: teardown then lists the cluster's Octavia load balancers with the
+user's token, which requires `load-balancer_member` **and** `member`. Without
+Octavia this step is skipped and `member` alone is enough.
 
 #### Solution
+
+On clouds with Octavia:
 
 ```bash
 openstack role add --project <project> --user <user> load-balancer_member
 ```
 
-Cluster then goes to `DELETE_FAILED` until deleted by a principal with the role
-(same document: permission + failure modes).
+A cluster that already failed stays at `DELETE_FAILED` until deleted by a principal
+with the role (see [`Magnum/golden-cluster-template.md`](Magnum/golden-cluster-template.md):
+permission + failure modes).
 
 ### Issue 3: Cluster create fails mid-deploy (deploy timeout)
 

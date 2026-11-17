@@ -169,7 +169,7 @@ Magnum API allowed from the cluster network, and expect to bump `autoscaler_tag`
 |---|---|---|
 | 1. Create project | `openstack project create <project>` | One-time |
 | 2. Create user | `openstack user create --project <project> --domain admin_domain <user>` | One-time |
-| 3. Add roles | `openstack role add --project <project> --user <user> member` **and** `openstack role add --project <project> --user <user> load-balancer_member` | Both **required**: `member` for the cluster itself, `load-balancer_member` so cluster **delete** works (Octavia pre-delete 403 otherwise — see §4). Do **not** add `admin` for kubeconfig access — it is cloud-wide in Magnum (§3); each user downloads the kubeconfig of the cluster they created |
+| 3. Add roles | `openstack role add --project <project> --user <user> member`; **on clouds with Octavia** also `openstack role add --project <project> --user <user> load-balancer_member` | `member` is always required (the cluster itself). `load-balancer_member` is required only when Octavia is in the catalog, so cluster **delete** works (Octavia pre-delete 403 otherwise — see §4); without Octavia `member` alone is enough. Do **not** add `admin` for kubeconfig access — it is cloud-wide in Magnum (§3); each user downloads the kubeconfig of the cluster they created |
 | 4. *Skip for the common case* | see note below | Golden clusters embed the operator's `magnum-k8s` keypair — users get **no SSH**. A personal keypair only matters if the operator provisions a per-user template copy |
 | 5. Source credentials | `source <project>-openrc.sh` | Must match the project |
 | 6. Create cluster | `openstack coe cluster create <name> --cluster-template k8s-ct-golden --master-count 1 --node-count 1` | Template must be `--public` or in the same project |
@@ -271,10 +271,13 @@ administrators.
 
 ## 4. Cluster create/delete failure modes
 
-### Delete requires the Octavia role
+### Delete requires the Octavia role (clouds with Octavia only)
 
 Teardown runs magnum's `pre_delete_cluster` → `octavia.delete_loadbalancers`, which
-lists the cluster's load balancers using the **user's** token. Octavia policy
+lists the cluster's load balancers using the **user's** token. The heat driver does
+this only when Octavia is in the Keystone catalog (`keystone.is_octavia_enabled()`
+in `magnum/drivers/heat/driver.py`); on a cloud without Octavia the step is skipped
+and `member` alone is enough to delete. Octavia policy
 (`/etc/octavia/policy.json`) allows that list only for admins or `load-balancer_member`
 **and** `member`, both in the LB's owning project:
 
