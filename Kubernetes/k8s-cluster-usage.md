@@ -76,6 +76,15 @@ project-scoped. Workflow + options: see the permission model in
 * The artifact embeds the cluster CA + a client certificate signed by that CA for a
   freshly generated key — kubectl validates TLS as-is against the master FIP, and
   cert-mode auth grants `CN=admin, O=system:masters` (full cluster-admin).
+* The client certificate is valid for `[x509] term_of_validity` (default 1825
+  days) and magnum offers no revocation for it. Do **not** shorten
+  `term_of_validity` as a mitigation — the same setting also governs the cluster
+  CA, node certificates and the conductor certificate. The only way to invalidate
+  issued kubeconfigs is CA rotation (`openstack coe ca rotate <cluster>`), which
+  restarts all Deployments/DaemonSets and the control-plane services, invalidates
+  ServiceAccount tokens, and needs the creator's trust to be valid (nodes fetch
+  their new certs through the trust in `make-cert.sh`). *Not yet tested on this
+  cloud.*
 * Users **never** receive the node SSH key (`magnum-k8s.pem`) — node-level access
   stays admin/operator-only.
 * For per-user RBAC later: `openstack coe cluster config --use-keystone` produces a
