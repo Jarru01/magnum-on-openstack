@@ -4,7 +4,12 @@ Guides, configuration files and notes on deploying the OpenStack **Magnum**
 (container orchestration / COE) service on a private OpenStack cloud managed via
 **MaaS** and **Juju** — up to creating fully working Kubernetes clusters.
 
-> Tested on a mini 2-node OpenStack cloud deployed via **MaaS + Juju** (Bobcat).
+> **Stack:** OpenStack 2023.2 (Bobcat) · Magnum 17.0.1, heat driver
+> `k8s_fedora_coreos_v1` · Kubernetes 1.26 on Fedora CoreOS 38 · Skyline · Juju
+> charms on MAAS.
+>
+> Built on a 2-node reference cloud; storage (Cinder CSI) was verified on a second,
+> Cinder-capable cloud.
 > The golden cluster template bakes in every known fix, so users create clusters
 > with zero SSH and zero manual node surgery.
 
@@ -60,9 +65,9 @@ Document | Description
 
 `openstack coe cluster config` / Skyline **Download kubeconfig** → 403 *"Policy
 doesn't allow certificate:get to be performed"*. Only the cluster creator (or a
-cloud administrator) passes Magnum's certificates policy: the client signs a
-`CN=admin, O=system:masters` certificate (= cluster-admin) for the kubeconfig, so
-Magnum gates it.
+cloud administrator) passes Magnum's certificates policy: the client generates a
+`CN=admin, O=system:masters` key + CSR (= cluster-admin) and Magnum signs it via
+`certificate:create`, so Magnum gates both calls.
 
 #### Solution
 
@@ -164,6 +169,6 @@ already timed out, delete and recreate it.
 
 ## About
 
-Guides, configuration files and notes on deploying the Magnum
-container-orchestration service on a private OpenStack cloud managed via MaaS and
-Juju.
+Companion repository to a diploma thesis on Kubernetes-as-a-Service with OpenStack
+Magnum. The custom Skyline charm used here lives in
+[Jarru01/skyline-charm](https://github.com/Jarru01/skyline-charm).

@@ -111,16 +111,16 @@ options:
   creator/admin rule, so a member cannot fetch even the CA. There is also no
   server-side "token kubeconfig" mode.
 * **Viable route A (dashboard-backed):** a role-differentiated download — the
-  Skyline kubeconfig endpoint (currently charm-injected source) checks cluster
-  ownership: owner → today's admin-cert
-  kubeconfig; member → embed the member's live keystone token with the CA
+  Skyline kubeconfig download endpoint (added by the
+  [skyline-charm](https://github.com/Jarru01/skyline-charm)) checks cluster
+  ownership: owner → today's admin-cert kubeconfig; member → embed the member's live keystone token with the CA
   fetched via a **service account** (never the admin cert). Requires in-cluster
   RBAC bindings for member webhook groups, and member-token downloads expire with
   the keystone token (~1h).
 * **Viable route B (standalone issuer):** a small service of our own that relays
   the CA via a service account and assembles member token kubeconfigs — **no
-  OpenStack/charm code touched**, keeps the interim charm patches from growing
-  further, but is a separate component to host and maintain.
+  OpenStack/charm code touched**, but is a separate component to host and
+  maintain.
 * Both are deferred: **not built, not needed** for the current single-owner use.
 
 ---
@@ -152,13 +152,13 @@ kubectl auto-checks `~/.kube/config`:
 **Linux:**
 ```bash
 mkdir -p ~/.kube
-cp ~/magnum-work/kubeconfig/config ~/.kube/config
+cp ~/kubeconfig/config ~/.kube/config   # or the Skyline download
 ```
 
 **Windows (PowerShell):**
 ```powershell
 mkdir -Force $HOME\.kube
-cp C:\Users\<you>\.kube\config-current $HOME\.kube\config   # or from Downloads
+Copy-Item "$HOME\Downloads\<cluster>-kubeconfig.yaml" "$HOME\.kube\config"
 ```
 
 > The `KUBECONFIG` env var is only needed to switch between multiple clusters; for
@@ -411,7 +411,8 @@ not iptables.**
 ```bash
 # on the maas host:
 #   tcp dport 6767 dnat to <masterFIP>:6443
-echo '<maas-password>' | sudo -S nft add rule inet nat PREROUTING tcp dport 6767 dnat to 198.51.100.10:6443
+#   (table/chain names depend on the host's ruleset — check with `sudo nft list ruleset`)
+sudo nft add rule inet nat PREROUTING tcp dport 6767 dnat to 198.51.100.10:6443
 ```
 
 Then take the downloaded kubeconfig and edit only this part:

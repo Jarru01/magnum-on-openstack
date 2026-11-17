@@ -16,14 +16,13 @@ this.
 ### SSH keypair `magnum-k8s`
 
 ```bash
-cd ~/magnum-work
 openssl genrsa -out magnum-k8s.pem 2048 && chmod 600 magnum-k8s.pem
 ssh-keygen -y -f magnum-k8s.pem > magnum-k8s.pub
 openstack keypair create --public-key magnum-k8s.pub magnum-k8s
 ```
 
-Private key stays on the account that owns it (no other way into the nodes). SSH to
-nodes as user `core`.
+Private key stays on the account that owns it and must be kept safe — it is the only
+way into the nodes. SSH to nodes as user `core`.
 
 ### Fedora CoreOS image
 
@@ -43,8 +42,7 @@ rm fedora-coreos-38.20230806.3.0-openstack.x86_64.qcow2   # reclaim space after 
 
 > **Historical template note:** the original build used an interim `k8s-ct` template
 > (labels: `kube_tag` only — no containerd labels, not `--public`) and created the
-> cluster `k8s-test`. Its command is intentionally omitted here to avoid confusion —
-> the canonical, current create command is in
+> cluster `k8s-test`. The current create command is in
 > [`golden-cluster-template.md`](golden-cluster-template.md) §1. The cluster was later
 > recreated from the golden template (2026-08-28, containerd 1.6.20).
 
@@ -122,7 +120,7 @@ Nodes registered but stayed NotReady; three stacked issues:
    flannel-cni-plugin image, so the init container copies `/flannel` from the rancher
    mirror to `/opt/cni/bin/flannel`.
 
-The patch has three recognised states (PRISTINE / BUSYBOX / FINAL) and the current
+The script recognises four states (PRISTINE / BUSYBOX / RANCHER_OLDARG / FINAL) and the current
 [`fix-flannel-final.py`](fix-flannel-final.py) handles all of them idempotently.
 
 After kicking stuck pods (`kubectl delete pod --force --grace-period=0`) everything
@@ -149,8 +147,9 @@ config is per-unit; the leader-only action leaves the others stale) and hard-ref
 the browser:
 
 ```bash
-for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done
-# (adjust unit numbers to match `juju status skyline`)
+for u in $(juju status skyline --format=json | jq -r '.applications.skyline.units | keys[]'); do
+  juju run "$u" regenerate-nginx
+done
 ```
 
 ### Fix B — upstream skyline-console JS bug (Create Cluster page error)
@@ -165,31 +164,12 @@ as *"Error, Unable to get Data"*:
 ```
 
 Applied to all occurrences in the minified JS files on each Skyline unit; stale
-`.gz` companions removed so nginx serves the patched `.js`. The patch marker ensures
-idempotency.
+`.gz` companions removed so nginx serves the patched `.js`. Re-running the replacement
+is safe: the fixed `r||{}` no longer matches the pattern.
 
 ---
 
-## 3. Cleanup (done)
-
-| Item | Action |
-|---|---|
-| `fcos-base.qcow2` / `fcos-ca.qcow2` temp files | Deleted (uploaded images persist in Glance) |
-| `combined-bundle.pem` temp cert bundle | Deleted |
-| `test-nginx` deployment | Deleted (cluster clean, system pods only) |
-
-**Retained for future use:**
-
-| File | Purpose |
-|---|---|
-| `magnum-k8s.pem` | Private SSH key for cluster nodes — **no other way in** |
-| `kubeconfig/config` | kubectl credentials |
-| `kubectl` (v1.26.8) | Matching kubectl binary |
-| `kisroot-ca.crt` | Vault root CA — working copy at `~/magnum-work/kisroot-ca.crt`; retained anchor `~/snap/openstackclients/common/` (from the initial cloud deploy, Apr) |
-
----
-
-## 4. Postscript — later storage work
+## 3. Postscript — later storage work
 
 The "no Cinder/Swift" constraints in this log describe the **reference cloud**.
 Later work (2026-09/10) added the storage layers on a Cinder-capable cloud:

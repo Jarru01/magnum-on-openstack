@@ -181,7 +181,8 @@ kubectl patch svc kubernetes-dashboard -n kube-system --type=json \
 # get the worker FIP:
 kubectl get nodes -o wide    # EXTERNAL-IP of the non-master node
 
-echo '<maas-password>' | sudo -S nft add rule ip nat prerouting tcp dport <PORT> dnat to <WORKER_FIP>:<PORT>
+# table/chain names depend on the host's ruleset — check with `sudo nft list ruleset`
+sudo nft add rule ip nat prerouting tcp dport <PORT> dnat to <WORKER_FIP>:<PORT>
 ```
 
 This forwards traffic hitting the maas host's external IP on that port to the

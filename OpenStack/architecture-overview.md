@@ -96,7 +96,7 @@ needed** — a stock Fedora CoreOS image works.
 | **Keepalived** | VIP failover — HA across the proxy nodes |
 | **MySQL InnoDB Cluster** | Database — every service has its own replicated schema |
 | **RabbitMQ** | Message bus — async service communication |
-| **Octavia** | LBaaS — provisions `LoadBalancer`-type k8s services (OCCM) and the cluster's API/etc. LBs |
+| **Octavia** | LBaaS — provisions `LoadBalancer`-type k8s services (OCCM) and the cluster's API/etcd LBs |
 | **Designate** | DNS-as-a-service (deployed, zones not configured) |
 | **Skyline** | Web dashboard (alternative to Horizon) |
 

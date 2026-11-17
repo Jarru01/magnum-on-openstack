@@ -1,4 +1,4 @@
-# temporary / local scratch (colleague's deploy log, not part of the runbook)
+# temporary / local scratch
 tmp/
 
 # secrets / credentials

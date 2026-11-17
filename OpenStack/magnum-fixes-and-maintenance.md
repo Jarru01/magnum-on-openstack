@@ -27,7 +27,7 @@ the render template compares it to the string `"3"` → always renders `v2.0`. P
 the template once so every render emits `v3`:
 
 ```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i \
+juju exec --unit magnum/0 -- sudo sed -i \
   's/identity_service.api_version == "3"/identity_service.api_version|string == "3"/' \
   /var/lib/juju/agents/unit-magnum-0/charm/templates/parts/keystone-authtoken
 ```
@@ -37,12 +37,13 @@ tree); it is lost on `juju refresh`/`upgrade-charm` — re-apply it (see §3). T
 already-rendered file immediately (or after a refresh wiped the patch):
 
 ```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
-juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
+juju exec --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
+juju exec --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
 
-`cluster-user-trust` (issue 3) does not revert once set; the v2.0→v3 editor does not
-revert either. (The old pre-TLS haproxy-backend bug is resolved by the TLS topology
+`cluster-user-trust` (issue 3) does not revert once set. The keystone template patch
+persists until `juju refresh`/`upgrade-charm`; a sed on the rendered `magnum.conf`
+alone is lost on the next re-render. (The old pre-TLS haproxy-backend bug is resolved by the TLS topology
 the certificates relation enables — see [`disaster-recovery.md`](disaster-recovery.md).)
 
 ---
@@ -85,12 +86,14 @@ image is gone everywhere (checked 2026-09-10):
 | `quay.io/flannel/flannel-cni`, `docker.io/flannel/flannel-cni` | 401 / 404 |
 | `docker.io/flannel/flannel-cni-plugin` | 200, but different name/layout (`/flannel`) |
 
-So the fragment is patched in place. The patch has gone through three states:
+So the fragment is patched in place. The script recognises four states:
 
 1. **PRISTINE** — `image: ${_prefix}flannel-cni:${FLANNEL_CNI_TAG}` + `magnum-install-cni.sh`
 2. **BUSYBOX** — `busybox:1.36` + inline `wget` of the standard plugins (no flannel
    binary → nodes `NotReady`)
-3. **FINAL** — rancher mirror image + `cp /flannel /host/opt/cni/bin/flannel` +
+3. **RANCHER_OLDARG** — rancher mirror image, but still the old
+   `magnum-install-cni.sh` argument (intermediate)
+4. **FINAL** — rancher mirror image + `cp /flannel /host/opt/cni/bin/flannel` +
    `wget` of the standard plugins
 
 [`../Magnum/fix-flannel-final.py`](../Magnum/fix-flannel-final.py) recognises **all**
@@ -156,8 +159,10 @@ joins the certificates relation), regenerate on **every** Skyline unit — the c
 is per-unit, so a leader-only run leaves the other units stale:
 
 ```bash
-for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done
-# adjust unit numbers to match `juju status skyline`; hard-refresh the browser after
+for u in $(juju status skyline --format=json | jq -r '.applications.skyline.units | keys[]'); do
+  juju run "$u" regenerate-nginx
+done
+# hard-refresh the browser after
 ```
 
 **Fix B — upstream skyline-console JS bug (Create Cluster page error).**
@@ -177,18 +182,22 @@ Apply to all occurrences in the minified JS on each Skyline unit, then remove st
 
 ## 5. Upgrading the Fedora CoreOS image (security updates)
 
+> **Scope:** only **FCOS 38.x point releases** are drop-in with this heat driver. A
+> newer major (tested: FCOS 44) boots only with package shims that this repository
+> deliberately does not maintain — see [`limitations.md`](limitations.md) §2.
+
 New clusters can boot a newer FCOS image; existing clusters are **not affected** —
 only new clusters use the updated template. No CA baking is involved (the CA comes
 from the `vault:certificates` relation and is injected via Heat at boot).
 
 ```bash
 # 1. download the new FCOS image (check https://builds.coreos.fedoraproject.org/)
-wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/39.XXXXX.X.X/x86_64/fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2.xz
-unxz -T0 fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2.xz
+wget https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/<38.build>/x86_64/fedora-coreos-<38.build>-openstack.x86_64.qcow2.xz
+unxz -T0 fedora-coreos-<38.build>-openstack.x86_64.qcow2.xz
 
 # 2. upload it to Glance
-openstack image create fedora-coreos-39.XXXXX.X.X \
-  --file fedora-coreos-39.XXXXX.X.X-openstack.x86_64.qcow2 \
+openstack image create fedora-coreos-<38.build> \
+  --file fedora-coreos-<38.build>-openstack.x86_64.qcow2 \
   --disk-format qcow2 --container-format bare \
   --property os_distro=fedora-coreos
 
@@ -201,8 +210,8 @@ openstack coe cluster template show k8s-ct-golden -f value -c image_id
 
 **What stays the same:** all cluster template labels, the flannel patch, the golden
 template itself, the haproxy/keystone config. **What to verify after:** the new FCOS
-works with k8s 1.26 (kernel/ignition compatibility), the containerd version
-interacts correctly with `containerd_version=1.6.20`, `heat-container-agent` boots;
+works with k8s 1.26 (kernel/ignition compatibility), the pinned containerd 1.6.20
+tarball still installs and runs, `heat-container-agent` boots;
 create a test cluster before making it the default.
 
 > Existing clusters keep their original image and continue running.
@@ -211,7 +220,7 @@ create a test cluster before making it the default.
 
 ## 6. Lessons learned
 
-1. **Bobcat magnum + k8s 1.26 is a broken combination** — the Heat templates
+1. **Bobcat magnum + k8s 1.26 does not work out of the box** — the Heat templates
    predate the 1.24 kubelet flag removal and don't configure CRI. `kube_tag`
    controls the k8s version but the templates assume pre-1.24 kubelet regardless.
 2. **A missing `vault:certificates` relation silently breaks keystone TLS** — the
@@ -232,7 +241,7 @@ create a test cluster before making it the default.
    versions when available, bypassing edits to the uncompressed `.js`.
 8. **Skyline frontend silently swallows errors** — the generic "Unable to get Data"
    wraps any JS exception; check DevTools for the real TypeError.
-9. **The charm-era `containerd_version` default is too old for k8s ≥1.26** — k8s 1.26
+9. **The driver's `containerd_version` default is too old for k8s ≥1.26** — k8s 1.26
    requires CRI v1 (containerd ≥1.6.x); always set it via template label.
 10. **Upstream template defaults are intentional** — `container_runtime=host-docker`
     and the pre-1.6 containerd default target pre-1.24. For k8s ≥1.24 you MUST override
@@ -254,5 +263,5 @@ create a test cluster before making it the default.
 * Upstream the keystone `v2.0`-render fix (the int-vs-string template comparison)
   so the render patch doesn't need re-applying after `juju refresh`.
 * Add a charm action (e.g. `apply-template-fixes`) that re-applies the flannel and
-  keystone fixes after a refresh/package upgrade:
-  `juju run magnum/0 apply-template-fixes`.
+  keystone fixes after a refresh/package upgrade (proposed — no such action exists
+  today).

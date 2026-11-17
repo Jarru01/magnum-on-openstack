@@ -24,7 +24,7 @@ clusters are unaffected (images cached, etcd bootstrapped). Scheduling pods with
 Runs reliably, but no upstream security fixes.
 
 **Version ceilings (2026-10):** the `k8s_fedora_coreos_v1` heat driver in this
-Magnum release is Yoga-era and caps Kubernetes at **1.26** — k8s 1.27 removed
+Magnum release (Bobcat) caps Kubernetes at **1.26** — k8s 1.27 removed
 `--container-runtime`, which the templates pass unconditionally, and the
 `kubelet_options` label can only append options, not remove them. The driver is
 also deprecated and removed in newer Magnum releases, so no upstream fixes will

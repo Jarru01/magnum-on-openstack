@@ -70,7 +70,7 @@ keystone version.
 **A. Patch the render template once (recommended — survives reboots and re-renders):**
 
 ```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i \
+juju exec --unit magnum/0 -- sudo sed -i \
   's/identity_service.api_version == "3"/identity_service.api_version|string == "3"/' \
   /var/lib/juju/agents/unit-magnum-0/charm/templates/parts/keystone-authtoken
 ```
@@ -84,8 +84,8 @@ already-rendered file until the next relation change/reboot.
 **B. Correct the rendered file (immediate, but re-apply after every re-render):**
 
 ```bash
-juju exec -m kis --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
-juju exec -m kis --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
+juju exec --unit magnum/0 -- sudo sed -i s/v2.0/v3/g /etc/magnum/magnum.conf
+juju exec --unit magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 ```
 
 ### Certificates / OpenStack CA — via the `vault:certificates` relation
@@ -121,7 +121,7 @@ anchors).
 > magnum-api on `9491` (public port −10 for apache, −20 for the API). The keystone
 > catalog endpoints are re-registered as `https://<unit>:9511/v1`. After enabling
 > it, regenerate Skyline's nginx **on every Skyline unit** (the config is per-unit):
-> `for u in skyline/72 skyline/73 skyline/74; do juju run "$u" regenerate-nginx; done`.
+> `for u in $(juju status skyline --format=json | jq -r '.applications.skyline.units | keys[]'); do juju run "$u" regenerate-nginx; done`.
 > Then hard-refresh the browser.
 
 ---
@@ -157,16 +157,9 @@ trust machinery → DB.
 
 ### Two projects named `admin`
 
-The cloud contains **two projects named `admin`**:
-
-| ID | Domain | Role |
-|---|---|---|
-| (operator's working project) | **admin_domain** | The project all cluster work happens in; every command in this documentation scopes here |
-| (other) | default | Separate/unused |
-
-During investigation a temporary `admin` role was added to user `skyline` on the
-*default-domain* admin project and **immediately reverted** once it proved
-unnecessary. Net IAM change: none.
+The cloud contains **two projects named `admin`** — one in `admin_domain` and one in
+`default`. All cluster work in this documentation scopes to the **`admin_domain`**
+one (the `default` one is unused), so always set `OS_PROJECT_DOMAIN_NAME=admin_domain`.
 
 ### Keypair visibility (important gotcha)
 
@@ -183,11 +176,11 @@ This Nova version treats keypairs as **per-USER resources**. Consequences:
 
 ---
 
-## Working OpenStack CLI credentials
+## 5. OpenStack CLI credentials
 
-The stock `exportCred.sh` can pull a stale admin password from the keystone leader.
-A working admin context used throughout this documentation (replace the
-placeholders):
+Helper scripts that read the admin password from the keystone leader can return a
+stale value, so set the variables explicitly. The admin context used throughout this
+documentation (replace the placeholders and save it as `admin-openrc.sh`):
 
 ```bash
 export OS_AUTH_URL=https://192.0.2.1:5000/v3
@@ -199,7 +192,7 @@ export OS_PROJECT_DOMAIN_NAME=admin_domain
 export OS_REGION_NAME=RegionOne
 export OS_INTERFACE=public
 export OS_IDENTITY_API_VERSION=3
-export OS_CACERT=<path-to-kisroot-ca.crt>
+export OS_CACERT=<path-to-vault-root-ca.crt>
 ```
 
 > **Note:** use `source admin-openrc.sh`, **not** `./admin-openrc.sh`. Running it

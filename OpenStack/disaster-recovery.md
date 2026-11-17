@@ -37,14 +37,15 @@ still work (served by any member), which makes it easy to misdiagnose.
 Fix — restart every router so it re-bootstraps to the current primary:
 
 ```bash
-for svc in placement nova neutron glance keystone magnum barbican octavia dashboard; do
-  juju ssh ${svc}/0 -- sudo systemctl restart ${svc}-mysql-router.service
+# <principal-app>:<router-prefix> — match the list to `juju status | grep mysql-router`
+for p in placement:placement nova-cloud-controller:nova neutron-api:neutron \
+         glance:glance keystone:keystone heat:heat magnum:magnum \
+         barbican:barbican octavia:octavia openstack-dashboard:dashboard; do
+  juju ssh "${p%%:*}/0" -- sudo systemctl restart "${p##*:}-mysql-router.service"
 done
-# (unit names nova-cloud-controller/0, neutron-api/0, openstack-dashboard/0 use
-#  nova-mysql-router / neutron-mysql-router / dashboard-mysql-router service names)
 ```
 
-Verify: `openstack quota set --class default --instances 20` succeeds (a real write).
+Verify with a real write, e.g. `openstack quota set --class default --instances <current-value>` (re-set the current default so nothing changes).
 
 ### Magnum keystone `v2.0` paths (charm render bug) + TLS topology
 
@@ -109,8 +110,7 @@ etcd holds all Kubernetes state. It is **not replicated on a single master**:
 In both cases, **backups are mandatory** for long-lived clusters: etcd snapshots
 taken from the master and copied off-cluster are the canonical protection against
 logical corruption, accidental deletion, or losing the controller. No snapshot or
-restore procedure is documented yet — validate the commands on a live master before
-relying on them, and remember that restoring etcd is **destructive** (it rolls the
+restore procedure is documented yet; remember that restoring etcd is **destructive** (it rolls the
 whole cluster back in time). Availability: use 1 or 3 masters (never 2); with 3
 masters etcd is replicated (quorum 2) and the Cinder etcd volume becomes optional.
 
@@ -129,10 +129,13 @@ juju ssh magnum/0 -- sudo sed -i 's/v2.0/v3/g' /etc/magnum/magnum.conf
 juju ssh magnum/0 -- sudo systemctl restart magnum-api magnum-conductor
 
 # 2b. restart all mysql-routers (DB failover left them read-only)
-for svc in placement nova neutron glance keystone magnum barbican octavia dashboard; do
-  juju ssh ${svc}/0 -- sudo systemctl restart ${svc}-mysql-router.service
+#     (same loop as in "Stale mysql-routers" above)
+for p in placement:placement nova-cloud-controller:nova neutron-api:neutron \
+         glance:glance keystone:keystone heat:heat magnum:magnum \
+         barbican:barbican octavia:octavia openstack-dashboard:dashboard; do
+  juju ssh "${p%%:*}/0" -- sudo systemctl restart "${p##*:}-mysql-router.service"
 done
-# verify writes work: openstack quota set --class default --instances 20
+# verify writes work with any harmless write, e.g. re-setting a quota to its current value
 
 # 3. wait for nodes to boot and pods to schedule
 #    no SSH needed — the DaemonSet init container re-runs and restores
