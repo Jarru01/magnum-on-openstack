@@ -61,16 +61,21 @@ produces the same kind of kubeconfig the dashboard download returns.
 
 ### Who is allowed to download
 
-Both paths call magnum's `GET /v1/certificates/<cluster>` — gated to the cluster
-**creator** or a project **`admin`** (a plain `member` gets a 403 "Policy doesn't
-allow certificate:get"). Workflow + options: see the permission model in
+Both paths use magnum's certificates API: `GET /v1/certificates/<cluster>` returns
+**only the cluster CA**; the client then generates a key + CSR
+(`CN=admin, O=system:masters`) and has magnum sign it (`POST /v1/certificates`,
+`certificate:create`). Both calls are gated to the cluster **creator** (or a cloud
+administrator) — a plain `member` gets a 403 "Policy doesn't allow certificate:get".
+Clusters are **one per owner**: each user downloads the kubeconfig of the cluster
+they created. Do not grant `admin` for this — in magnum it is cloud-wide, not
+project-scoped. Workflow + options: see the permission model in
 [`golden-cluster-template.md`](../Magnum/golden-cluster-template.md).
 
 ### Key properties of the kubeconfig users get
 
-* The artifact embeds the cluster CA + a client certificate — kubectl validates TLS
-  as-is against the master FIP, and cert-mode auth grants `CN=admin, O=system:masters`
-  (full cluster-admin).
+* The artifact embeds the cluster CA + a client certificate signed by that CA for a
+  freshly generated key — kubectl validates TLS as-is against the master FIP, and
+  cert-mode auth grants `CN=admin, O=system:masters` (full cluster-admin).
 * Users **never** receive the node SSH key (`magnum-k8s.pem`) — node-level access
   stays admin/operator-only.
 * For per-user RBAC later: `openstack coe cluster config --use-keystone` produces a
@@ -80,22 +85,25 @@ allow certificate:get"). Workflow + options: see the permission model in
 
 ### Future work: role-scoped kubeconfigs for shared clusters
 
-Current posture assumes **one operator owns each cluster** — everyone allowed
-through `certificate:get` (creator/admin) receives the *same* full-admin client
-cert. There is no per-user split today. If multiple *trusted* users must share a
-cluster with role-based limits later, the relevant facts and options:
+Current posture assumes **one owner per cluster** — everyone who passes the
+certificates policy (the creator, or a cloud admin) can mint the *same* kind of
+full-admin client cert. There is no per-user split today. If multiple *trusted*
+users must share a cluster with role-based limits later, the relevant facts and
+options:
 
 * **`--use-keystone` already exists** and produces a `token:` kubeconfig — but it
   is gated by the **same** `certificate:get` policy as the cert path, because the
   CLI still fetches the cluster CA from `GET /v1/certificates/<cluster>` first.
-  So today it works only for creator/admin, not for plain members.
-* **The real blocker for members isn't assembly, it's the CA gate.** That single
-  endpoint returns the cluster CA *and* the per-cluster admin client cert
-  together; there is no "CA only" response and no server-side "token kubeconfig"
-  mode. Letting a member fetch the CA unavoidably hands them the admin cert too.
+  So today it works only for the creator (or a cloud admin), not for plain members.
+* **The real blocker for members isn't assembly, it's the policy gate.** The `GET`
+  endpoint already returns **only the cluster CA** — magnum never hands out an admin
+  client cert; the client mints one via CSR (`certificate:create`). But in the
+  default policy `certificate:get` and `certificate:create` share the same
+  creator/admin rule, so a member cannot fetch even the CA. There is also no
+  server-side "token kubeconfig" mode.
 * **Viable route A (dashboard-backed):** a role-differentiated download — the
-  Skyline kubeconfig endpoint (currently charm-injected source) checks the
-  user's project role / cluster ownership: `admin`/owner → today's admin-cert
+  Skyline kubeconfig endpoint (currently charm-injected source) checks cluster
+  ownership: owner → today's admin-cert
   kubeconfig; member → embed the member's live keystone token with the CA
   fetched via a **service account** (never the admin cert). Requires in-cluster
   RBAC bindings for member webhook groups, and member-token downloads expire with

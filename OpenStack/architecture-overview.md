@@ -167,12 +167,15 @@ in-cluster RBAC path for the same project to share a cluster: the
 `k8s_viewer` map to Kubernetes permissions, and the `k8s-keystone-auth-policy` +
 `keystone-sync-policy` ConfigMaps grant users in the project access to that
 cluster. It's real but the looser/more manual model — and the kubeconfig side of
-it is where the friction lives: any user allowed through `certificate:get`
-(creator/admin) still receives the full admin client cert, and letting a plain
-`member` fetch the CA to build a token kubeconfig is blocked by the same gate
-(no "CA only" response). So sharing is workable, but "proper, fully-automatic
-per-user kubeconfig issuance" is a gap (see `k8s-cluster-usage.md` — Future
-work).
+it is where the friction lives: `GET /v1/certificates/<cluster>` returns only the
+cluster CA, and the client mints the full-admin client cert itself (CSR
+`CN=admin, O=system:masters`, signed via `certificate:create`). Both calls share
+the same creator/admin policy gate, so a plain `member` cannot fetch even the CA to
+build a token kubeconfig. Granting `admin` is no workaround: in Magnum it is not
+project-scoped (an `admin` in any project can view, resize and delete clusters in
+all projects), so it belongs to cloud administrators only. So sharing is workable,
+but "proper, fully-automatic per-user kubeconfig issuance" is a gap (see
+`k8s-cluster-usage.md` — Future work).
 
 **Scale is proven** at the cluster level: CERN ran Magnum in production and tested
 bays up to ~1,000 nodes (2M req/s on a 200-node bay). Documented scale costs:

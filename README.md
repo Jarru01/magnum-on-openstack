@@ -59,14 +59,18 @@ Document | Description
 ### Issue 1: Kubeconfig download fails with 403
 
 `openstack coe cluster config` / Skyline **Download kubeconfig** → 403 *"Policy
-doesn't allow certificate:get to be performed"*. The caller must be the cluster
-creator or a project `admin` (the kubeconfig embeds `CN=admin, O=system:masters`
-= cluster-admin, so OpenStack gates it).
+doesn't allow certificate:get to be performed"*. Only the cluster creator (or a
+cloud administrator) passes Magnum's certificates policy: the client signs a
+`CN=admin, O=system:masters` certificate (= cluster-admin) for the kubeconfig, so
+Magnum gates it.
 
 #### Solution
 
-Let the user create their own cluster (self-service), or grant the `admin` role in
-the project. Full permission model + options:
+The model is **one cluster per owner**: let the user create their own cluster
+(self-service) and download its kubeconfig themselves. Do **not** grant the `admin`
+role for kubeconfig access — in Magnum `admin` is not project-scoped (an `admin` in
+any project can view, resize and delete clusters in **all** projects), so keep it
+for cloud administrators. Full permission model + options:
 [`Magnum/golden-cluster-template.md`](Magnum/golden-cluster-template.md).
 
 ### Issue 2: Cluster delete fails for a `member` user

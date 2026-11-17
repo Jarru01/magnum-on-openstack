@@ -169,7 +169,7 @@ Magnum API allowed from the cluster network, and expect to bump `autoscaler_tag`
 |---|---|---|
 | 1. Create project | `openstack project create <project>` | One-time |
 | 2. Create user | `openstack user create --project <project> --domain admin_domain <user>` | One-time |
-| 3. Add roles | `openstack role add --project <project> --user <user> member` **and** `openstack role add --project <project> --user <user> load-balancer_member` | Both **required**: `member` for the cluster itself, `load-balancer_member` so cluster **delete** works (Octavia pre-delete 403 otherwise — see §4). Add `admin` too if they must download kubeconfig for clusters **they didn't create** (§3) |
+| 3. Add roles | `openstack role add --project <project> --user <user> member` **and** `openstack role add --project <project> --user <user> load-balancer_member` | Both **required**: `member` for the cluster itself, `load-balancer_member` so cluster **delete** works (Octavia pre-delete 403 otherwise — see §4). Do **not** add `admin` for kubeconfig access — it is cloud-wide in Magnum (§3); each user downloads the kubeconfig of the cluster they created |
 | 4. *Skip for the common case* | see note below | Golden clusters embed the operator's `magnum-k8s` keypair — users get **no SSH**. A personal keypair only matters if the operator provisions a per-user template copy |
 | 5. Source credentials | `source <project>-openrc.sh` | Must match the project |
 | 6. Create cluster | `openstack coe cluster create <name> --cluster-template k8s-ct-golden --master-count 1 --node-count 1` | Template must be `--public` or in the same project |
@@ -198,22 +198,32 @@ operator-only in all cases.
 | Cluster | **Project** | Any user in the project (view/list) |
 | Cluster template | **Project** (or public) | Any user in the project (or all projects if `--public`) |
 | Keypair | **User** | Only the user who created it |
-| Kubeconfig (`cluster config`) | Project to view; **creator/admin to fetch** | Owner (creator) or any project `admin` — see §3 |
+| Kubeconfig (`cluster config`) | Project to view; **creator to fetch** | Owner (creator); cloud administrators only via the cloud-wide `admin` role — see §3 |
 | Node SSH access | **User** (needs keypair) | Only the user who owns the keypair |
 
 ---
 
 ## 3. Who can download a kubeconfig (the 403 people stumble on)
 
-`openstack coe cluster config` (CLI) and Skyline's **Download kubeconfig** both call
-magnum's `GET /v1/certificates/<cluster>`, gated by magnum policy
-(`/etc/magnum/policy.json`):
+`openstack coe cluster config` (CLI) and Skyline's **Download kubeconfig** both use
+magnum's certificates API in two steps:
+
+1. `GET /v1/certificates/<cluster>` (`certificate:get`) returns **only the cluster
+   CA**.
+2. The client generates a private key + CSR with `CN=admin, O=system:masters` and
+   `POST`s it to `/v1/certificates` (`certificate:create`); magnum signs it with the
+   cluster CA. The admin client cert is therefore minted by the client — magnum never
+   stores or returns one.
+
+Both steps are gated by magnum policy (`/etc/magnum/policy.json`):
 
 ```
 "admin_or_user":   "is_admin:True or user_id:%(user_id)s"
 "cluster_user":    "user_id:%(trustee_user_id)s"
 "certificate:get": "rule:admin_or_user or rule:cluster_user"
 ```
+
+(`certificate:create` uses the same rule.)
 
 A project member who did **not** create the cluster gets this exact error:
 
@@ -222,25 +232,37 @@ Failed to fetch CA certificate: {"errors": [{"code": "client", "status": 403,
 "title": "Policy doesn't allow certificate:get to be performed", ... }]}
 ```
 
-This is **by design**: the kubeconfig ships a client cert `CN=admin, O=system:masters`
-— full `cluster-admin` in k8s — so OpenStack restricts who can pull it.
+This is **by design**: the kubeconfig carries a client cert `CN=admin, O=system:masters`
+— full `cluster-admin` in k8s — so magnum restricts who can obtain it.
 
-### Options for granting kubeconfig access (pick one)
+### `admin` is not a project-scoped role in magnum
+
+`is_admin` comes from `context_is_admin = role:admin`, which magnum checks with an
+empty target — **no project match**. For an admin, cluster get/update/delete also
+run with `all_tenants = True`, and the charm's `cluster:*_all_projects` policies
+resolve to `rule:admin_api`. A user holding `admin` in **any** project can therefore
+view, resize and delete clusters in **all** projects. (Kubeconfig download itself
+stays limited to clusters of the project the token is scoped to.) Granting `admin`
+"just for kubeconfig" hands out cloud-wide cluster control — reserve it for cloud
+administrators.
+
+### Options for granting kubeconfig access
 
 | # | Grant | Works for | Notes |
 |---|---|---|---|
-| **1. Creator/owner — recommended, least-privilege** | `member` role; the user **creates their own cluster** | only clusters that user created | The self-service model the golden template enables |
-| **2. Project `admin` role** | `member` + `admin` in the project | **any** cluster in the project | Verified working (2026-08-29). Note: `admin` is full project-admin (also satisfies `cluster:delete_all_projects` / `clustertemplate:delete_all_projects`) — more than kubeconfig access. Fine for a trusted single-project cloud |
-| **3. Relax magnum policy** | patch `certificate:get` in `/etc/magnum/policy.json`, e.g. to `rule:admin_or_owner` | any member of the project for any cluster in it | Lets any project member grab cluster-admin creds → only for trusted clouds. The charm **re-renders** `policy.json` on refresh/reboot, so the patch reverts |
+| **1. Creator/owner — recommended, least-privilege** | `member` role; the user **creates their own cluster** | only clusters that user created | The self-service, one-cluster-per-owner model the golden template enables and this repository assumes |
+| **2. `admin` role — not for users** | `admin` in the project | any cluster in the token's project (kubeconfig) | Works (verified 2026-08-29), but `admin` is cloud-wide in magnum — see above. For cloud administrators only, never as a kubeconfig grant |
+| **3. Relax magnum policy** | patch `certificate:get` / `certificate:create` in `/etc/magnum/policy.json`, e.g. to `rule:admin_or_owner` | any member of the project for any cluster in it | Lets any project member mint cluster-admin creds → only for trusted clouds. The charm **re-renders** `policy.json` on refresh/reboot, so the patch reverts |
 
 ### Practical model
 
 - **Creator** can get kubeconfig for their own cluster ✅ and use kubectl ✅
-- **Project admin** can get kubeconfig for any cluster in the project ✅
+- **Cloud administrators** (`admin` role) can get kubeconfig for clusters in the
+  project their token is scoped to ✅ — and manage clusters in every project
 - **Other project members** can see/list clusters but get the 403 above on kubeconfig ❌
 - **Nobody can SSH** into cluster nodes without a keypair ❌
 
-> **Access level:** whoever fetches a kubeconfig — creator or admin — receives a
+> **Access level:** whoever obtains a kubeconfig — creator or cloud admin — gets a
 > `CN=admin, O=system:masters` certificate, i.e. full cluster-admin. There is no RBAC
 > scoping in the download; if you need per-user k8s RBAC, create ServiceAccounts +
 > Roles inside the cluster instead of sharing the kubeconfig.
