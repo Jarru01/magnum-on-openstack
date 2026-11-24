@@ -19,12 +19,12 @@ kubeconfig retrieval are both supported from the dashboard.
 
 | Action | Supported |
 |---|---|
-| Create cluster | ✅ |
-| List/view clusters | ✅ |
-| Resize cluster | ✅ |
-| Delete cluster | ✅ |
-| **Download kubeconfig** | ✅ |
-| **Deploy workloads (kubectl)** | ❌ use the downloaded kubeconfig with local `kubectl` |
+| Create cluster | Yes |
+| List/view clusters | Yes |
+| Resize cluster | Yes |
+| Delete cluster | Yes |
+| **Download kubeconfig** | Yes |
+| **Deploy workloads (kubectl)** | No, use the downloaded kubeconfig with local `kubectl` |
 
 Full flow: create the cluster under **Container Infra** (uses the public golden
 template), open its detail view, click **Download kubeconfig**, then use the file

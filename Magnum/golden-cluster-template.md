@@ -257,11 +257,11 @@ administrators.
 
 ### Practical model
 
-- **Creator** can get kubeconfig for their own cluster ✅ and use kubectl ✅
+- **Creator** can get kubeconfig for their own cluster and use kubectl
 - **Cloud administrators** (`admin` role) can get kubeconfig for clusters in the
-  project their token is scoped to ✅ — and manage clusters in every project
-- **Other project members** can see/list clusters but get the 403 above on kubeconfig ❌
-- **Nobody can SSH** into cluster nodes without a keypair ❌
+  project their token is scoped to, and manage clusters in every project
+- **Other project members** can see/list clusters but get the 403 above on kubeconfig
+- **Nobody can SSH** into cluster nodes without a keypair
 
 > **Access level:** whoever obtains a kubeconfig — creator or cloud admin — gets a
 > `CN=admin, O=system:masters` certificate, i.e. full cluster-admin. There is no RBAC

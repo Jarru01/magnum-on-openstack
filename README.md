@@ -23,7 +23,7 @@ Guides, configuration files and notes on deploying the OpenStack **Magnum**
 > routable from outside, so some guides include MAAS `nft` DNAT workarounds.
 > On production OpenStack with routable FIPs those steps do not apply.
 
-## 🚀 Start here — getting Magnum fully working
+## Start here — getting Magnum fully working
 
 Read these four in order — they take you from a deployed cloud to a working cluster:
 
@@ -42,7 +42,7 @@ Optional next steps: [Kubernetes dashboard](Kubernetes/kubernetes-dashboard.md) 
 [Cloud prerequisites](OpenStack/cloud-prerequisites.md) ·
 [Known limitations](OpenStack/limitations.md).
 
-## 📚 Reference (all documents)
+## Reference (all documents)
 
 Document | Description
 --- | ---
@@ -59,7 +59,7 @@ Document | Description
 [Flannel patch](Magnum/fix-flannel-final.py) | The patched `flannel-service.sh` — init container copies `/flannel` from the rancher mirror and fetches the standard CNI plugins, eliminating node-level CNI fixes
 [Kubeconfig examples](Kubernetes/kubeconfig-dashboard-token.example.yaml) / [DNAT](Kubernetes/kubeconfig-dnat.example.yaml) | Ready templates for dashboard and DNAT kubeconfig files
 
-## 🧯 Troubleshooting
+## Troubleshooting
 
 ### Issue 1: Kubeconfig download fails with 403
 
